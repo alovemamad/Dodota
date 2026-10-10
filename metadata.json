@@ -1,0 +1,6 @@
+{
+  "name": "دودوتا",
+  "description": "مدیریت هوشمند درآمد، هزینه، بدهی، اقساط و پس‌انداز",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
