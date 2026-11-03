@@ -10,14 +10,6 @@ plugins {
   alias(libs.plugins.google.services) apply false
 }
 
-// Automatically recreate debug.keystore from debug.keystore.base64 when opened locally in Android Studio
-val debugKeystoreFile = rootProject.file("debug.keystore")
-val debugKeystoreBase64File = rootProject.file("debug.keystore.base64")
-if (!debugKeystoreFile.exists() && debugKeystoreBase64File.exists()) {
-  runCatching {
-    val base64Content = debugKeystoreBase64File.readText(Charsets.UTF_8).trim()
-    val decodedBytes = Base64.getMimeDecoder().decode(base64Content)
-    debugKeystoreFile.writeBytes(decodedBytes)
   }
 }
 
