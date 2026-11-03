@@ -77,9 +77,10 @@ fun GoalsScreen(
     val completedCount = remember(goals) { goals.count { it.isCompleted || (it.targetAmount > 0 && it.currentAmount >= it.targetAmount) } }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
-                title = "اهداف پس‌انداز و سرمایه‌گذاری",
+                title = "اهداف",
                 onBackClick = onBack
             )
         },
@@ -100,7 +101,7 @@ fun GoalsScreen(
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             if (goals.isNotEmpty()) {
@@ -120,8 +121,8 @@ fun GoalsScreen(
             if (goals.isEmpty()) {
                 item {
                     EmptyStateCard(
-                        title = "هنوز هدف پس‌اندازی تعریف نکرده‌اید",
-                        description = "برای اهدافی مانند خرید خودرو، سفر، پس‌انداز اضطراری یا خرید لپ‌تاپ هدف مالی بسازید و با واریز و برداشت هوشمند پیشرفت آن را دنبال کنید.",
+                        title = "هدفی ثبت نشده است",
+                        description = "",
                         icon = Icons.Outlined.TrackChanges
                     )
                 }
@@ -554,7 +555,7 @@ private fun SavingsGoalsOutlookHeroCard(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "چشم‌انداز کل اهداف پس‌انداز",
+                            text = "اهداف",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.ExtraBold,
                             color = IncomeGreen
@@ -688,56 +689,43 @@ fun AddGoalDialog(
     var targetText by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
 
-    AlertDialog(
+    GraphicalFormDialog(
         onDismissRequest = onDismiss,
-        title = { Text("تعریف هدف پس‌انداز جدید", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("عنوان هدف (مثال: خرید آیفون، سفر، طلا)") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                PersianAmountInput(
-                    value = targetText,
-                    onValueChange = { targetText = it },
-                    currency = currency,
-                    label = "مبلغ کل هدف"
-                )
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("یادداشت یا انگیزه هدف (اختیاری)") },
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val target = PersianNumberFormatter.parseAmount(targetText)
-                    if (title.isNotBlank() && target > 0L) {
-                        onSave(title, target, note)
-                    }
-                },
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("ثبت هدف", fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("انصراف")
+        title = "تعریف هدف جدید",
+        icon = Icons.Outlined.TrackChanges,
+        accentColor = IncomeGreen,
+        confirmText = "ثبت هدف",
+        onConfirm = {
+            val target = PersianNumberFormatter.parseAmount(targetText)
+            if (title.isNotBlank() && target > 0L) {
+                onSave(title, target, note)
             }
         }
-    )
+    ) {
+        DodotaTextField(
+            value = title,
+            onValueChange = { title = it },
+            label = "عنوان هدف",
+            leadingIcon = Icons.Outlined.TrackChanges,
+            modifier = Modifier.fillMaxWidth()
+        )
+        PersianAmountInput(
+            value = targetText,
+            onValueChange = { targetText = it },
+            currency = currency,
+            label = "مبلغ کل هدف"
+        )
+        DodotaTextField(
+            value = note,
+            onValueChange = { note = it },
+            label = "یادداشت",
+            leadingIcon = Icons.Default.Notes,
+            singleLine = false,
+            minLines = 2,
+            maxLines = 4,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
 }
 
 @Composable
@@ -752,63 +740,49 @@ fun EditGoalDialog(
     var currentText by remember { mutableStateOf(goal.currentAmount.toString()) }
     var note by remember { mutableStateOf(goal.note) }
 
-    AlertDialog(
+    GraphicalFormDialog(
         onDismissRequest = onDismiss,
-        title = { Text("ویرایش هدف پس‌انداز", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("عنوان هدف") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                PersianAmountInput(
-                    value = targetText,
-                    onValueChange = { targetText = it },
-                    currency = currency,
-                    label = "مبلغ کل هدف"
-                )
-                PersianAmountInput(
-                    value = currentText,
-                    onValueChange = { currentText = it },
-                    currency = currency,
-                    label = "موجودی فعلی جمع‌شده"
-                )
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("یادداشت (اختیاری)") },
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val target = PersianNumberFormatter.parseAmount(targetText)
-                    val current = PersianNumberFormatter.parseAmount(currentText)
-                    if (title.isNotBlank() && target > 0L) {
-                        onSave(title, target, current, note)
-                    }
-                },
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("بروزرسانی", fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("انصراف")
+        title = "ویرایش هدف",
+        icon = Icons.Outlined.Edit,
+        confirmText = "بروزرسانی",
+        onConfirm = {
+            val target = PersianNumberFormatter.parseAmount(targetText)
+            val current = PersianNumberFormatter.parseAmount(currentText)
+            if (title.isNotBlank() && target > 0L) {
+                onSave(title, target, current, note)
             }
         }
-    )
+    ) {
+        DodotaTextField(
+            value = title,
+            onValueChange = { title = it },
+            label = "عنوان هدف",
+            leadingIcon = Icons.Outlined.TrackChanges,
+            modifier = Modifier.fillMaxWidth()
+        )
+        PersianAmountInput(
+            value = targetText,
+            onValueChange = { targetText = it },
+            currency = currency,
+            label = "مبلغ کل هدف"
+        )
+        PersianAmountInput(
+            value = currentText,
+            onValueChange = { currentText = it },
+            currency = currency,
+            label = "موجودی فعلی جمع‌شده"
+        )
+        DodotaTextField(
+            value = note,
+            onValueChange = { note = it },
+            label = "یادداشت",
+            leadingIcon = Icons.Default.Notes,
+            singleLine = false,
+            minLines = 2,
+            maxLines = 4,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
 }
 
 /**
@@ -858,11 +832,14 @@ fun GoalDepositDialog(
     ) {
         GlassCard(
             shape = RoundedCornerShape(28.dp),
+            elevation = 10.dp,
             isHighlighted = true,
             borderColor = activeColor.copy(alpha = 0.65f),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 18.dp)
+                .imePadding()
+                .navigationBarsPadding()
         ) {
             Column(
                 modifier = Modifier

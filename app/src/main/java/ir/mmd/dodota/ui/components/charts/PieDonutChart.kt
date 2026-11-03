@@ -225,7 +225,7 @@ fun InteractiveDonutChart(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = PersianNumberFormatter.formatNumberWithCommas(s.amount, currency),
+                        text = PersianNumberFormatter.formatNumber(s.amount, currency.isEnglishDigits),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.outline,
@@ -241,7 +241,7 @@ fun InteractiveDonutChart(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = PersianNumberFormatter.formatNumberWithCommas(totalAmount, currency),
+                        text = PersianNumberFormatter.formatNumber(totalAmount, currency.isEnglishDigits),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.ExtraBold,
                         maxLines = 1,

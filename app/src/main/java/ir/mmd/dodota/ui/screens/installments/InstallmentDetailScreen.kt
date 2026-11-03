@@ -43,9 +43,6 @@ import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
 
-private val InstallmentAccentPurple = Color(0xFFA855F7)
-private val InstallmentAccentPurpleLight = Color(0xFFC084FC)
-
 @Composable
 fun InstallmentDetailScreen(
     planId: Long,
@@ -63,10 +60,14 @@ fun InstallmentDetailScreen(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    val accentColor = MaterialTheme.colorScheme.primary
+    val accentLight = MaterialTheme.colorScheme.secondary
+
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
-                title = plan?.title ?: "چشم‌انداز و جزئیات اقساط",
+                title = plan?.title ?: "جزئیات اقساط",
                 onBackClick = onBack
             )
         }
@@ -130,7 +131,7 @@ fun InstallmentDetailScreen(
                         border = BorderStroke(
                             1.5.dp,
                             Brush.linearGradient(
-                                colors = listOf(InstallmentAccentPurple, IncomeGreen.copy(alpha = 0.7f))
+                                colors = listOf(accentColor, IncomeGreen.copy(alpha = 0.7f))
                             )
                         ),
                         modifier = Modifier.fillMaxWidth()
@@ -141,8 +142,8 @@ fun InstallmentDetailScreen(
                                 .background(
                                     Brush.verticalGradient(
                                         colors = listOf(
-                                            Color(0xFF211332),
-                                            Color(0xFF14121D)
+                                            accentColor.copy(alpha = 0.16f),
+                                            MaterialTheme.colorScheme.surfaceContainer
                                         )
                                     )
                                 )
@@ -164,11 +165,11 @@ fun InstallmentDetailScreen(
                                         val arcSize = Size(size.width - inset * 2, size.height - inset * 2)
 
                                         drawCircle(
-                                            color = InstallmentAccentPurple.copy(alpha = 0.1f),
+                                            color = accentColor.copy(alpha = 0.1f),
                                             radius = (size.minDimension / 2f) - strokePx
                                         )
                                         drawArc(
-                                            color = InstallmentAccentPurple.copy(alpha = 0.2f),
+                                            color = accentColor.copy(alpha = 0.2f),
                                             startAngle = -90f,
                                             sweepAngle = 360f,
                                             useCenter = false,
@@ -179,7 +180,7 @@ fun InstallmentDetailScreen(
                                         if (animatedProgress > 0.01f) {
                                             drawArc(
                                                 brush = Brush.linearGradient(
-                                                    colors = listOf(InstallmentAccentPurple, InstallmentAccentPurpleLight, IncomeGreen)
+                                                    colors = listOf(accentColor, accentLight, IncomeGreen)
                                                 ),
                                                 startAngle = -90f,
                                                 sweepAngle = animatedProgress * 360f,
@@ -192,15 +193,15 @@ fun InstallmentDetailScreen(
                                     }
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text(
-                                            text = "${PersianNumberFormatter.toPersianDigits(percentPaid)}٪",
+                                            text = "${PersianNumberFormatter.formatDigits(percentPaid)}٪",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = if (percentPaid >= 100) IncomeGreen else InstallmentAccentPurpleLight
+                                            color = if (percentPaid >= 100) IncomeGreen else accentColor
                                         )
                                         Text(
                                             text = "پرداخت‌شده",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = Color.White.copy(alpha = 0.7f)
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
@@ -210,45 +211,122 @@ fun InstallmentDetailScreen(
                                         text = p.title,
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = Color.White
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
                                         text = "طرف حساب: ${p.creditorOrCompany.ifBlank { "مشخص نشده" }}",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = Color.White.copy(alpha = 0.75f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Spacer(modifier = Modifier.height(6.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = InstallmentAccentPurple.copy(alpha = 0.22f),
-                                        border = BorderStroke(1.dp, InstallmentAccentPurple.copy(alpha = 0.5f))
-                                    ) {
-                                        Text(
-                                            text = "${PersianNumberFormatter.toPersianDigits(paidCount)} از ${PersianNumberFormatter.toPersianDigits(totalCount)} قسط پاس شده",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = InstallmentAccentPurpleLight,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                        )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = accentColor.copy(alpha = 0.16f),
+                                            border = BorderStroke(1.dp, accentColor.copy(alpha = 0.45f))
+                                        ) {
+                                            Text(
+                                                text = "${PersianNumberFormatter.formatDigits(paidCount)} از ${PersianNumberFormatter.formatDigits(totalCount)} قسط پاس شده",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = accentColor,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                            )
+                                        }
+
+                                        val overdueCount = installments.count { !it.isPaid && it.dueDateMillis < System.currentTimeMillis() }
+                                        if (overdueCount > 0) {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = ExpenseRed.copy(alpha = 0.16f),
+                                                border = BorderStroke(1.dp, ExpenseRed.copy(alpha = 0.55f))
+                                            ) {
+                                                Text(
+                                                    text = "${PersianNumberFormatter.formatDigits(overdueCount)} قسط معوقه",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = ExpenseRed,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(14.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
 
-                            // Paid So Far vs Remaining Outlook Boxes
+                            // Total Loan Amount & Per-Installment Amount Row
+                            val displayLoanTotal = if (p.totalLoanAmount > 0L) p.totalLoanAmount else totalPlanAmount
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                                border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 9.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.AccountBalanceWallet,
+                                            contentDescription = null,
+                                            tint = accentColor,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "مبلغ کل وام:",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = PersianNumberFormatter.formatCurrency(displayLoanTotal, userPreferences.currency),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = accentColor
+                                        )
+                                    }
+                                    Text(
+                                        text = "هر قسط: ${PersianNumberFormatter.formatCurrency(p.installmentAmount, userPreferences.currency)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Paid So Far vs Remaining Outlook Boxes - کاملاً متناسب و هم‌اندازه
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(IntrinsicSize.Min),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Surface(
                                     shape = RoundedCornerShape(14.dp),
                                     color = IncomeGreen.copy(alpha = 0.14f),
                                     border = BorderStroke(1.dp, IncomeGreen.copy(alpha = 0.45f)),
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
                                 ) {
-                                    Column(modifier = Modifier.padding(10.dp)) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(10.dp),
+                                        verticalArrangement = Arrangement.SpaceBetween
+                                    ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Icon(
                                                 Icons.Default.Verified,
@@ -258,7 +336,7 @@ fun InstallmentDetailScreen(
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text(
-                                                text = "تا الان پرداخت کردم",
+                                                text = "پرداخت شده",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = IncomeGreen,
                                                 fontWeight = FontWeight.Bold
@@ -278,23 +356,30 @@ fun InstallmentDetailScreen(
 
                                 Surface(
                                     shape = RoundedCornerShape(14.dp),
-                                    color = InstallmentAccentPurple.copy(alpha = 0.14f),
-                                    border = BorderStroke(1.dp, InstallmentAccentPurple.copy(alpha = 0.45f)),
-                                    modifier = Modifier.weight(1f)
+                                    color = accentColor.copy(alpha = 0.14f),
+                                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.45f)),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
                                 ) {
-                                    Column(modifier = Modifier.padding(10.dp)) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(10.dp),
+                                        verticalArrangement = Arrangement.SpaceBetween
+                                    ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Icon(
                                                 Icons.Default.HourglassBottom,
                                                 contentDescription = null,
-                                                tint = InstallmentAccentPurpleLight,
+                                                tint = accentColor,
                                                 modifier = Modifier.size(14.dp)
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text(
-                                                text = "مانده کل اقساط",
+                                                text = "مانده اقساط",
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = InstallmentAccentPurpleLight,
+                                                color = accentColor,
                                                 fontWeight = FontWeight.Bold
                                             )
                                         }
@@ -303,7 +388,7 @@ fun InstallmentDetailScreen(
                                             text = PersianNumberFormatter.formatCurrency(remainingAmount, userPreferences.currency),
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = Color.White,
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -328,7 +413,7 @@ fun InstallmentDetailScreen(
                                 Text(
                                     text = "اتمام: ${PersianDateHelper.formatToPersianDate(endDateMillis)}",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = InstallmentAccentPurpleLight,
+                                    color = accentColor,
                                     fontWeight = FontWeight.ExtraBold
                                 )
                             }
@@ -350,7 +435,7 @@ fun InstallmentDetailScreen(
                                                 .clip(RoundedCornerShape(4.dp))
                                                 .background(
                                                     if (inst.isPaid) IncomeGreen
-                                                    else InstallmentAccentPurple.copy(alpha = 0.25f)
+                                                    else accentColor.copy(alpha = 0.25f)
                                                 )
                                         )
                                     }
@@ -362,37 +447,58 @@ fun InstallmentDetailScreen(
 
                 item {
                     Text(
-                        text = "جدول اقساط (برای تیک زدن یا لغو پرداخت روی هر قسط بزنید)",
+                        text = "جدول اقساط",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.ExtraBold
                     )
                 }
 
                 items(installments, key = { it.id }) { inst ->
-                    GlassCard(
-                        shape = RoundedCornerShape(18.dp),
-                        borderColor = if (inst.isPaid) IncomeGreen.copy(alpha = 0.6f)
-                        else InstallmentAccentPurple.copy(alpha = 0.45f),
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = {
-                            coroutineScope.launch {
-                                if (inst.isPaid) {
-                                    repository.unpayInstallment(p, inst)
-                                    Toast.makeText(context, "قسط به حالت پرداخت‌نشده برگشت", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    repository.payInstallment(
-                                        plan = p,
-                                        installment = inst,
-                                        accountId = p.accountId ?: accounts.firstOrNull()?.id
-                                    )
-                                    Toast.makeText(context, "قسط ${PersianNumberFormatter.toPersianDigits(inst.installmentIndex)} پرداخت شد ✓", Toast.LENGTH_SHORT).show()
-                                }
+                    val now = System.currentTimeMillis()
+                    val isOverdue = !inst.isPaid && inst.dueDateMillis < now
+
+                    val toggleInstallmentPayment = {
+                        coroutineScope.launch {
+                            if (inst.isPaid) {
+                                repository.unpayInstallment(p, inst)
+                                Toast.makeText(context, "قسط به حالت پرداخت‌نشده برگشت", Toast.LENGTH_SHORT).show()
+                            } else {
+                                repository.payInstallment(
+                                    plan = p,
+                                    installment = inst,
+                                    accountId = p.accountId ?: accounts.firstOrNull()?.id
+                                )
+                                Toast.makeText(context, "قسط ${PersianNumberFormatter.formatDigits(inst.installmentIndex)} پرداخت شد ✓", Toast.LENGTH_SHORT).show()
                             }
                         }
+                    }
+
+                    GlassCard(
+                        shape = RoundedCornerShape(20.dp),
+                        borderColor = when {
+                            inst.isPaid -> IncomeGreen.copy(alpha = 0.65f)
+                            isOverdue -> ExpenseRed.copy(alpha = 0.85f)
+                            else -> accentColor.copy(alpha = 0.35f)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { toggleInstallmentPayment() }
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .background(
+                                    when {
+                                        inst.isPaid -> Brush.horizontalGradient(
+                                            colors = listOf(IncomeGreen.copy(alpha = 0.14f), Color.Transparent)
+                                        )
+                                        isOverdue -> Brush.horizontalGradient(
+                                            colors = listOf(ExpenseRed.copy(alpha = 0.12f), Color.Transparent)
+                                        )
+                                        else -> Brush.horizontalGradient(
+                                            colors = listOf(accentColor.copy(alpha = 0.06f), Color.Transparent)
+                                        )
+                                    }
+                                )
                                 .padding(14.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
@@ -401,25 +507,47 @@ fun InstallmentDetailScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = if (inst.isPaid) IncomeGreen else InstallmentAccentPurple.copy(alpha = 0.2f),
-                                    modifier = Modifier.size(34.dp)
+                                // Graphical dual-ring check avatar
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(
+                                            when {
+                                                inst.isPaid -> Brush.linearGradient(
+                                                    colors = listOf(IncomeGreen, IncomeGreen.copy(alpha = 0.75f))
+                                                )
+                                                isOverdue -> Brush.linearGradient(
+                                                    colors = listOf(ExpenseRed.copy(alpha = 0.25f), ExpenseRed.copy(alpha = 0.12f))
+                                                )
+                                                else -> Brush.linearGradient(
+                                                    colors = listOf(accentColor.copy(alpha = 0.18f), accentColor.copy(alpha = 0.08f))
+                                                )
+                                            }
+                                        ),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        if (inst.isPaid) {
-                                            Icon(
-                                                Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = Color.Black,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        } else {
+                                    if (inst.isPaid) {
+                                        Icon(
+                                            Icons.Default.TaskAlt,
+                                            contentDescription = "پرداخت شده",
+                                            tint = Color.Black,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    } else if (isOverdue) {
+                                        Icon(
+                                            Icons.Default.PriorityHigh,
+                                            contentDescription = "قسط معوقه",
+                                            tint = ExpenseRed,
+                                            modifier = Modifier.size(26.dp)
+                                        )
+                                    } else {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             Text(
-                                                text = PersianNumberFormatter.toPersianDigits(inst.installmentIndex),
-                                                style = MaterialTheme.typography.labelMedium,
+                                                text = PersianNumberFormatter.formatDigits(inst.installmentIndex),
+                                                style = MaterialTheme.typography.titleSmall,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                color = InstallmentAccentPurpleLight
+                                                color = accentColor
                                             )
                                         }
                                     }
@@ -429,61 +557,116 @@ fun InstallmentDetailScreen(
 
                                 Column {
                                     Text(
-                                        text = "قسط ${PersianNumberFormatter.toPersianDigits(inst.installmentIndex)} از ${PersianNumberFormatter.toPersianDigits(p.numberOfInstallments)}",
+                                        text = "قسط ${PersianNumberFormatter.formatDigits(inst.installmentIndex)} از ${PersianNumberFormatter.formatDigits(p.numberOfInstallments)}",
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.ExtraBold,
-                                        textDecoration = if (inst.isPaid) TextDecoration.LineThrough else TextDecoration.None
+                                        textDecoration = if (inst.isPaid) TextDecoration.LineThrough else TextDecoration.None,
+                                        color = if (inst.isPaid) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
                                     )
+                                    Spacer(modifier = Modifier.height(2.dp))
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
                                             Icons.Outlined.CalendarMonth,
                                             contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.outline,
+                                            tint = if (isOverdue) ExpenseRed.copy(alpha = 0.8f) else MaterialTheme.colorScheme.outline,
                                             modifier = Modifier.size(13.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
                                             text = "سررسید: ${PersianDateHelper.formatToPersianDate(inst.dueDateMillis)}",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.outline
+                                            color = if (isOverdue) ExpenseRed.copy(alpha = 0.85f) else MaterialTheme.colorScheme.outline
                                         )
+                                    }
+                                    if (isOverdue) {
+                                        Spacer(modifier = Modifier.height(3.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                Icons.Default.ErrorOutline,
+                                                contentDescription = null,
+                                                tint = ExpenseRed,
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "قسط معوقه",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = ExpenseRed
+                                            )
+                                        }
                                     }
                                 }
                             }
 
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(
+                                horizontalAlignment = Alignment.End,
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
                                 Text(
                                     text = PersianNumberFormatter.formatCurrency(inst.amount, userPreferences.currency),
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = if (inst.isPaid) IncomeGreen else InstallmentAccentPurpleLight
+                                    color = when {
+                                        inst.isPaid -> IncomeGreen
+                                        isOverdue -> ExpenseRed
+                                        else -> accentColor
+                                    }
                                 )
 
-                                Spacer(modifier = Modifier.width(8.dp))
-
-                                Checkbox(
-                                    checked = inst.isPaid,
-                                    onCheckedChange = { checked ->
-                                        coroutineScope.launch {
-                                            if (checked && !inst.isPaid) {
-                                                repository.payInstallment(
-                                                    plan = p,
-                                                    installment = inst,
-                                                    accountId = p.accountId ?: accounts.firstOrNull()?.id
-                                                )
-                                                Toast.makeText(context, "قسط پرداخت شد ✓", Toast.LENGTH_SHORT).show()
-                                            } else if (!checked && inst.isPaid) {
-                                                repository.unpayInstallment(p, inst)
-                                                Toast.makeText(context, "پرداخت قسط لغو شد", Toast.LENGTH_SHORT).show()
-                                            }
-                                        }
+                                // Graphical Check / Tick Pill Button
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = when {
+                                        inst.isPaid -> IncomeGreen
+                                        isOverdue -> ExpenseRed.copy(alpha = 0.16f)
+                                        else -> accentColor.copy(alpha = 0.14f)
                                     },
-                                    colors = CheckboxDefaults.colors(
-                                        checkedColor = IncomeGreen,
-                                        checkmarkColor = Color.Black,
-                                        uncheckedColor = InstallmentAccentPurple
-                                    )
-                                )
+                                    border = BorderStroke(
+                                        1.dp,
+                                        when {
+                                            inst.isPaid -> IncomeGreen
+                                            isOverdue -> ExpenseRed.copy(alpha = 0.65f)
+                                            else -> accentColor.copy(alpha = 0.55f)
+                                        }
+                                    ),
+                                    modifier = Modifier.clickable { toggleInstallmentPayment() }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = when {
+                                                inst.isPaid -> Icons.Default.CheckCircle
+                                                isOverdue -> Icons.Default.WarningAmber
+                                                else -> Icons.Default.RadioButtonUnchecked
+                                            },
+                                            contentDescription = null,
+                                            tint = when {
+                                                inst.isPaid -> Color.Black
+                                                isOverdue -> ExpenseRed
+                                                else -> accentColor
+                                            },
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Text(
+                                            text = when {
+                                                inst.isPaid -> "پاس شد"
+                                                isOverdue -> "قسط معوقه"
+                                                else -> "ثبت تیک"
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = when {
+                                                inst.isPaid -> Color.Black
+                                                isOverdue -> ExpenseRed
+                                                else -> accentColor
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

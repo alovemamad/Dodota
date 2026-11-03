@@ -57,6 +57,7 @@ fun BudgetsScreen(
     val context = LocalContext.current
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
                 title = "بودجه‌بندی ماهانه (${PersianDateHelper.PERSIAN_MONTHS[currentPDate.month - 1]})",
@@ -86,8 +87,8 @@ fun BudgetsScreen(
             if (budgets.isEmpty()) {
                 item {
                     EmptyStateCard(
-                        title = "هنوز برای این ماه بودجه‌ای تعریف نکرده‌اید",
-                        description = "برای دسته‌بندی‌های مختلف (مثلاً خوراک، تفریح، خرید) سقف بودجه و درصد هشدار تعیین کنید تا هنگام ثبت هزینه باقی‌مانده بودجه نمایش داده شود.",
+                        title = "بودجه‌ای برای این ماه ثبت نشده است",
+                        description = "",
                         icon = Icons.Outlined.AccountBalanceWallet
                     )
                 }
@@ -133,7 +134,7 @@ fun BudgetsScreen(
                                             fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                            text = "هشدار در ${PersianNumberFormatter.toPersianDigits(budget.warningThresholdPercent)}٪",
+                                            text = "هشدار در ${PersianNumberFormatter.formatDigits(budget.warningThresholdPercent)}٪",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.outline
                                         )
@@ -150,7 +151,7 @@ fun BudgetsScreen(
                                         }
                                     ) {
                                         Text(
-                                            text = "${PersianNumberFormatter.toPersianDigits(percent)}٪",
+                                            text = "${PersianNumberFormatter.formatDigits(percent)}٪",
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = when {
@@ -319,94 +320,79 @@ fun AddBudgetDialog(
 
     val selectedCat = categories.firstOrNull { it.id == selectedCatId }
 
-    AlertDialog(
+    GraphicalFormDialog(
         onDismissRequest = onDismiss,
-        title = { Text("تعریف سقف بودجه ماهانه", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                DodotaExpandableSelector(
-                    label = "انتخاب دسته‌بندی هزینه",
-                    selectedTitle = selectedCat?.name ?: "انتخاب دسته‌بندی",
-                    leadingIcon = {
-                        CategoryIconView(
-                            iconName = selectedCat?.iconName ?: "category",
-                            colorHex = selectedCat?.colorHex ?: "#FF1E42",
-                            size = 34.dp
-                        )
-                    }
-                ) { closeSelector ->
-                    categories.forEach { cat ->
-                        val isSelected = cat.id == selectedCatId
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    selectedCatId = cat.id
-                                    closeSelector()
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                CategoryIconView(
-                                    iconName = cat.iconName,
-                                    colorHex = cat.colorHex,
-                                    size = 28.dp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = cat.name,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                )
-                            }
-                        }
-                    }
-                }
-
-                PersianAmountInput(
-                    value = amountText,
-                    onValueChange = { amountText = it },
-                    currency = currency,
-                    label = "سقف بودجه ماهانه"
-                )
-
-                Text(
-                    text = "درصد هشدار مصرف: ${PersianNumberFormatter.toPersianDigits(warningThreshold)}٪",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Slider(
-                    value = warningThreshold.toFloat(),
-                    onValueChange = { warningThreshold = it.toInt() },
-                    valueRange = 30f..100f
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val amount = PersianNumberFormatter.parseAmount(amountText)
-                    if (selectedCatId != null && amount > 0L) {
-                        onSave(selectedCatId!!, amount, warningThreshold)
-                    }
-                }
-            ) {
-                Text("ذخیره بودجه")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("انصراف")
+        title = "تعریف بودجه ماهانه",
+        icon = Icons.Outlined.AccountBalanceWallet,
+        confirmText = "ذخیره بودجه",
+        onConfirm = {
+            val amount = PersianNumberFormatter.parseAmount(amountText)
+            if (selectedCatId != null && amount > 0L) {
+                onSave(selectedCatId!!, amount, warningThreshold)
             }
         }
-    )
+    ) {
+        DodotaExpandableSelector(
+            label = "انتخاب دسته‌بندی هزینه",
+            selectedTitle = selectedCat?.name ?: "انتخاب دسته‌بندی",
+            leadingIcon = {
+                CategoryIconView(
+                    iconName = selectedCat?.iconName ?: "category",
+                    colorHex = selectedCat?.colorHex ?: "#FF1E42",
+                    size = 34.dp
+                )
+            }
+        ) { closeSelector ->
+            categories.forEach { cat ->
+                val isSelected = cat.id == selectedCatId
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            selectedCatId = cat.id
+                            closeSelector()
+                        }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CategoryIconView(
+                            iconName = cat.iconName,
+                            colorHex = cat.colorHex,
+                            size = 28.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = cat.name,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+        }
+
+        PersianAmountInput(
+            value = amountText,
+            onValueChange = { amountText = it },
+            currency = currency,
+            label = "سقف بودجه ماهانه"
+        )
+
+        Text(
+            text = "درصد هشدار مصرف: ${PersianNumberFormatter.formatDigits(warningThreshold)}٪",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Slider(
+            value = warningThreshold.toFloat(),
+            onValueChange = { warningThreshold = it.toInt() },
+            valueRange = 30f..100f
+        )
+    }
 }
 
 @Composable
@@ -420,50 +406,35 @@ fun EditBudgetDialog(
     var amountText by remember { mutableStateOf(budget.monthlyAmount.toString()) }
     var warningThreshold by remember { mutableIntStateOf(budget.warningThresholdPercent) }
 
-    AlertDialog(
+    GraphicalFormDialog(
         onDismissRequest = onDismiss,
-        title = { Text("ویرایش بودجه «$categoryName»", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                PersianAmountInput(
-                    value = amountText,
-                    onValueChange = { amountText = it },
-                    currency = currency,
-                    label = "سقف بودجه ماهانه جدید"
-                )
-
-                Text(
-                    text = "درصد هشدار مصرف: ${PersianNumberFormatter.toPersianDigits(warningThreshold)}٪",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Slider(
-                    value = warningThreshold.toFloat(),
-                    onValueChange = { warningThreshold = it.toInt() },
-                    valueRange = 30f..100f
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val amount = PersianNumberFormatter.parseAmount(amountText)
-                    if (amount > 0L) {
-                        onSave(amount, warningThreshold)
-                    }
-                }
-            ) {
-                Text("بروزرسانی")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("انصراف")
+        title = "ویرایش بودجه «$categoryName»",
+        icon = Icons.Outlined.Edit,
+        confirmText = "بروزرسانی",
+        onConfirm = {
+            val amount = PersianNumberFormatter.parseAmount(amountText)
+            if (amount > 0L) {
+                onSave(amount, warningThreshold)
             }
         }
-    )
+    ) {
+        PersianAmountInput(
+            value = amountText,
+            onValueChange = { amountText = it },
+            currency = currency,
+            label = "سقف بودجه ماهانه جدید"
+        )
+
+        Text(
+            text = "درصد هشدار مصرف: ${PersianNumberFormatter.formatDigits(warningThreshold)}٪",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Slider(
+            value = warningThreshold.toFloat(),
+            onValueChange = { warningThreshold = it.toInt() },
+            valueRange = 30f..100f
+        )
+    }
 }

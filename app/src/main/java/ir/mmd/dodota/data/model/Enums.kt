@@ -16,8 +16,8 @@ enum class AccountType(val title: String, val defaultIconName: String) {
 }
 
 enum class DebtType(val title: String) {
-    DEBT_I_OWE("بدهی من"),
-    RECEIVABLE_OWED_TO_ME("طلب من")
+    DEBT_I_OWE("بدهی"),
+    RECEIVABLE_OWED_TO_ME("طلب")
 }
 
 enum class DebtStatus(val title: String) {

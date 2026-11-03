@@ -27,7 +27,8 @@ data class UserPreferences(
     val autoLockTimeoutMinutes: Int = 1,
     val isWeeklyBackupEnabled: Boolean = true,
     val lastBackupMillis: Long = 0L,
-    val isOnboardingCompleted: Boolean = false
+    val isOnboardingCompleted: Boolean = false,
+    val isBalanceHidden: Boolean = false
 ) {
     val isPinEnabled: Boolean get() = isAppLockEnabled && pinHash.isNotBlank()
     val colorTheme: AppThemeMode get() = themeMode
@@ -50,6 +51,7 @@ class UserPreferencesRepository(private val context: Context) {
         val IS_WEEKLY_BACKUP_ENABLED = booleanPreferencesKey("is_weekly_backup_enabled")
         val LAST_BACKUP_MILLIS = longPreferencesKey("last_backup_millis")
         val IS_ONBOARDING_COMPLETED = booleanPreferencesKey("is_onboarding_completed")
+        val IS_BALANCE_HIDDEN = booleanPreferencesKey("is_balance_hidden")
     }
 
     val userPreferencesFlow: Flow<UserPreferences> = dataStore.data
@@ -91,9 +93,16 @@ class UserPreferencesRepository(private val context: Context) {
                 autoLockTimeoutMinutes = preferences[PreferencesKeys.AUTO_LOCK_TIMEOUT_MINUTES] ?: 1,
                 isWeeklyBackupEnabled = preferences[PreferencesKeys.IS_WEEKLY_BACKUP_ENABLED] ?: true,
                 lastBackupMillis = preferences[PreferencesKeys.LAST_BACKUP_MILLIS] ?: 0L,
-                isOnboardingCompleted = preferences[PreferencesKeys.IS_ONBOARDING_COMPLETED] ?: false
+                isOnboardingCompleted = preferences[PreferencesKeys.IS_ONBOARDING_COMPLETED] ?: false,
+                isBalanceHidden = preferences[PreferencesKeys.IS_BALANCE_HIDDEN] ?: false
             )
         }
+
+    suspend fun setBalanceHidden(hidden: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.IS_BALANCE_HIDDEN] = hidden
+        }
+    }
 
     suspend fun setCurrency(currency: AppCurrency) {
         dataStore.edit { preferences ->

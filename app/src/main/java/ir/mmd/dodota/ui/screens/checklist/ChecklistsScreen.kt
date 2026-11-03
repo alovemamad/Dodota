@@ -15,9 +15,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -26,6 +30,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -40,12 +45,15 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import ir.mmd.dodota.data.model.*
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
+import ir.mmd.dodota.ui.components.DodotaTextField
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.EmptyStateCard
 import ir.mmd.dodota.ui.components.GlassCard
+import ir.mmd.dodota.ui.components.GraphicalFormDialog
 import ir.mmd.dodota.ui.components.PersianAmountInput
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
@@ -99,7 +107,6 @@ fun ChecklistsScreen(
     val context = LocalContext.current
 
     var selectedCategoryFilter by remember { mutableStateOf("همه") }
-    var selectedItemFilter by remember { mutableStateOf(ChecklistItemFilter.ALL) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var checklistToEdit by remember { mutableStateOf<ChecklistEntity?>(null) }
     var itemToEdit by remember { mutableStateOf<ChecklistItemEntity?>(null) }
@@ -111,23 +118,11 @@ fun ChecklistsScreen(
         base.sortedWith(compareByDescending<ChecklistEntity> { it.isPinned }.thenByDescending { it.createdAtMillis })
     }
 
-    val totalItemsCount = allItems.size
-    val completedItemsCount = allItems.count { it.isChecked }
-    val pendingItemsCount = (totalItemsCount - completedItemsCount).coerceAtLeast(0)
-    val totalEstimatedAmount = allItems.sumOf { it.estimatedAmount }
-    val completedEstimatedAmount = allItems.filter { it.isChecked }.sumOf { it.estimatedAmount }
-    val remainingEstimatedAmount = (totalEstimatedAmount - completedEstimatedAmount).coerceAtLeast(0L)
-
-    val overallProgress by animateFloatAsState(
-        targetValue = if (totalItemsCount > 0) (completedItemsCount.toFloat() / totalItemsCount.toFloat()).coerceIn(0f, 1f) else 0f,
-        animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing),
-        label = "checklist_overall_progress"
-    )
-
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
-                title = "چک‌لیست‌های هوشمند و لیست خرید",
+                title = "چک‌لیست",
                 onBackClick = onBack
             )
         },
@@ -146,125 +141,73 @@ fun ChecklistsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .imePadding()
                 .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1. Iconic Hero Outlook Dashboard Card
+            // Horizontal Category Filter Strip
             item {
-                ChecklistsHeroOutlookCard(
-                    checklistsCount = checklists.size,
-                    totalItemsCount = totalItemsCount,
-                    completedItemsCount = completedItemsCount,
-                    pendingItemsCount = pendingItemsCount,
-                    overallProgress = overallProgress,
-                    totalEstimatedAmount = totalEstimatedAmount,
-                    completedEstimatedAmount = completedEstimatedAmount,
-                    remainingEstimatedAmount = remainingEstimatedAmount,
-                    currency = userPreferences.currency
-                )
-            }
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(CHECKLIST_CATEGORY_STYLES) { catStyle ->
+                        val isSelected = selectedCategoryFilter == catStyle.title
+                        val count = if (catStyle.title == "همه") checklists.size
+                        else checklists.count { it.category == catStyle.title }
 
-            // 2. Iconic Horizontal Category Filter Strip + Item Status Filter
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(CHECKLIST_CATEGORY_STYLES) { catStyle ->
-                            val isSelected = selectedCategoryFilter == catStyle.title
-                            val count = if (catStyle.title == "همه") checklists.size
-                            else checklists.count { it.category == catStyle.title }
-
-                            Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = if (isSelected) catStyle.accentColor.copy(alpha = 0.22f)
-                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                                border = BorderStroke(
-                                    width = if (isSelected) 1.5.dp else 1.dp,
-                                    color = if (isSelected) catStyle.accentColor
-                                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-                                ),
-                                modifier = Modifier.clickable { selectedCategoryFilter = catStyle.title }
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (isSelected) catStyle.accentColor.copy(alpha = 0.22f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            border = BorderStroke(
+                                width = if (isSelected) 1.5.dp else 1.dp,
+                                color = if (isSelected) catStyle.accentColor
+                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                            ),
+                            modifier = Modifier.clickable { selectedCategoryFilter = catStyle.title }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .size(26.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(catStyle.accentColor.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(26.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(catStyle.accentColor.copy(alpha = 0.2f)),
-                                        contentAlignment = Alignment.Center
+                                    Icon(
+                                        imageVector = catStyle.icon,
+                                        contentDescription = null,
+                                        tint = catStyle.accentColor,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                }
+                                Text(
+                                    text = catStyle.title,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                    color = if (isSelected) catStyle.accentColor else MaterialTheme.colorScheme.onSurface
+                                )
+                                if (count > 0) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = if (isSelected) catStyle.accentColor else MaterialTheme.colorScheme.surface
                                     ) {
-                                        Icon(
-                                            imageVector = catStyle.icon,
-                                            contentDescription = null,
-                                            tint = catStyle.accentColor,
-                                            modifier = Modifier.size(15.dp)
+                                        Text(
+                                            text = PersianNumberFormatter.toPersianDigits(count),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                         )
                                     }
-                                    Text(
-                                        text = catStyle.title,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                        color = if (isSelected) catStyle.accentColor else MaterialTheme.colorScheme.onSurface
-                                    )
-                                    if (count > 0) {
-                                        Surface(
-                                            shape = CircleShape,
-                                            color = if (isSelected) catStyle.accentColor else MaterialTheme.colorScheme.surface
-                                        ) {
-                                            Text(
-                                                text = PersianNumberFormatter.toPersianDigits(count),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
                                 }
-                            }
-                        }
-                    }
-
-                    // Item Status Filter Row (همه اقلام / باقی‌مانده / انجام‌شده)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "نمایش اقلام:",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline,
-                            fontWeight = FontWeight.Bold
-                        )
-                        ChecklistItemFilter.values().forEach { filter ->
-                            val isSel = selectedItemFilter == filter
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = if (isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                                else Color.Transparent,
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (isSel) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
-                                ),
-                                modifier = Modifier.clickable { selectedItemFilter = filter }
-                            ) {
-                                Text(
-                                    text = filter.title,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = if (isSel) FontWeight.ExtraBold else FontWeight.Normal,
-                                    color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                )
                             }
                         }
                     }
@@ -275,25 +218,18 @@ fun ChecklistsScreen(
             if (filteredChecklists.isEmpty()) {
                 item {
                     EmptyStateCard(
-                        title = "چک‌لیستی در این دسته یافت نشد",
-                        description = "با لمس دکمه «چک‌لیست جدید» یک لیست گرافیکی برای خریدهای روزانه، اقلام سفر یا کارهای مالی خود بسازید.",
+                        title = "چک‌لیستی ثبت نشده",
+                        description = "",
                         icon = Icons.Outlined.Checklist
                     )
                 }
             } else {
                 items(filteredChecklists, key = { it.id }) { checklist ->
                     val rawItems = allItems.filter { it.checklistId == checklist.id }
-                    val visibleItems = remember(rawItems, selectedItemFilter) {
-                        when (selectedItemFilter) {
-                            ChecklistItemFilter.ALL -> rawItems
-                            ChecklistItemFilter.PENDING -> rawItems.filter { !it.isChecked }
-                            ChecklistItemFilter.COMPLETED -> rawItems.filter { it.isChecked }
-                        }
-                    }
                     ChecklistCard(
                         checklist = checklist,
                         allChecklistItems = rawItems,
-                        visibleItems = visibleItems,
+                        visibleItems = rawItems,
                         userPreferences = userPreferences,
                         onTogglePin = {
                             coroutineScope.launch {
@@ -446,237 +382,9 @@ fun ChecklistsScreen(
     }
 }
 
-@Composable
-private fun ChecklistsHeroOutlookCard(
-    checklistsCount: Int,
-    totalItemsCount: Int,
-    completedItemsCount: Int,
-    pendingItemsCount: Int,
-    overallProgress: Float,
-    totalEstimatedAmount: Long,
-    completedEstimatedAmount: Long,
-    remainingEstimatedAmount: Long,
-    currency: AppCurrency
-) {
-    val percentInt = (overallProgress * 100).toInt()
-    val primaryColor = MaterialTheme.colorScheme.primary
 
-    Surface(
-        shape = RoundedCornerShape(28.dp),
-        color = Color.Transparent,
-        border = BorderStroke(
-            width = 1.5.dp,
-            brush = Brush.linearGradient(
-                colors = listOf(
-                    primaryColor.copy(alpha = 0.8f),
-                    IncomeGreen.copy(alpha = 0.65f),
-                    Color(0xFF8B5CF6).copy(alpha = 0.6f)
-                )
-            )
-        ),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF171E31),
-                            Color(0xFF111522),
-                            Color(0xFF0E111A)
-                        )
-                    )
-                )
-                .padding(18.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(primaryColor, IncomeGreen)
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.FactCheck,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "چشم‌انداز چک‌لیست‌ها و خریدها",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = "${PersianNumberFormatter.toPersianDigits(checklistsCount)} لیست فعال • ${PersianNumberFormatter.toPersianDigits(completedItemsCount)} انجام‌شده و ${PersianNumberFormatter.toPersianDigits(pendingItemsCount)} باقی‌مانده",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
-                    }
-                }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Glowing Circular Progress Ring
-                Box(
-                    modifier = Modifier.size(86.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val strokePx = 8.5.dp.toPx()
-                        val inset = strokePx / 2f + 2f
-                        val arcSize = Size(size.width - inset * 2, size.height - inset * 2)
-
-                        drawCircle(
-                            color = IncomeGreen.copy(alpha = 0.08f),
-                            radius = (size.minDimension / 2f) - strokePx
-                        )
-                        drawArc(
-                            color = Color.White.copy(alpha = 0.12f),
-                            startAngle = -90f,
-                            sweepAngle = 360f,
-                            useCenter = false,
-                            topLeft = Offset(inset, inset),
-                            size = arcSize,
-                            style = Stroke(width = strokePx, cap = StrokeCap.Round)
-                        )
-                        if (overallProgress > 0.01f) {
-                            drawArc(
-                                brush = Brush.linearGradient(
-                                    colors = listOf(primaryColor, IncomeGreen)
-                                ),
-                                startAngle = -90f,
-                                sweepAngle = overallProgress * 360f,
-                                useCenter = false,
-                                topLeft = Offset(inset, inset),
-                                size = arcSize,
-                                style = Stroke(width = strokePx, cap = StrokeCap.Round)
-                            )
-                        }
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "${PersianNumberFormatter.toPersianDigits(percentInt)}٪",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (percentInt >= 100 && totalItemsCount > 0) IncomeGreen else Color.White
-                        )
-                        Text(
-                            text = "پیشرفت کل",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
-                    }
-                }
-
-                // Financial Summary Pills
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(7.dp)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = IncomeGreen.copy(alpha = 0.15f),
-                        border = BorderStroke(1.dp, IncomeGreen.copy(alpha = 0.45f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "انجام / خریداری شده:",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = IncomeGreen,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = PersianNumberFormatter.formatCurrency(completedEstimatedAmount, currency),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = IncomeGreen
-                            )
-                        }
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFFF59E0B).copy(alpha = 0.14f),
-                        border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.4f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "مانده برآورد خرید:",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFFFBBF24),
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = PersianNumberFormatter.formatCurrency(remainingEstimatedAmount, currency),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
-                            )
-                        }
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = primaryColor.copy(alpha = 0.14f),
-                        border = BorderStroke(1.dp, primaryColor.copy(alpha = 0.4f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "برآورد کل لیست‌ها:",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.8f)
-                            )
-                            Text(
-                                text = PersianNumberFormatter.formatCurrency(totalEstimatedAmount, currency),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ChecklistCard(
     checklist: ChecklistEntity,
@@ -867,23 +575,20 @@ fun ChecklistCard(
             // Progress Bar + Per-List Financial Strip
             if (totalCount > 0) {
                 Spacer(modifier = Modifier.height(10.dp))
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(MaterialTheme.colorScheme.surface)
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(parsedColor.copy(alpha = 0.15f))
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxHeight()
                             .fillMaxWidth(progress)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors = listOf(parsedColor, IncomeGreen)
-                                )
-                            )
+                            .clip(RoundedCornerShape(50))
+                            .background(if (percentPaid >= 100) IncomeGreen else parsedColor)
                     )
                 }
 
@@ -911,46 +616,67 @@ fun ChecklistCard(
 
             AnimatedVisibility(visible = isExpanded) {
                 Column(modifier = Modifier.padding(top = 14.dp)) {
-                    // Graphical Quick Add Item Box
+                    // Well-proportioned Quick Add Item Box
                     Surface(
                         shape = RoundedCornerShape(18.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
                         border = BorderStroke(1.dp, parsedColor.copy(alpha = 0.35f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
+                        val itemBringIntoViewRequester = remember { BringIntoViewRequester() }
+                        val itemCoroutineScope = rememberCoroutineScope()
                         Column(
-                            modifier = Modifier.padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                                .bringIntoViewRequester(itemBringIntoViewRequester),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
+                            DodotaTextField(
+                                value = newItemText,
+                                onValueChange = { newItemText = it },
+                                label = "عنوان مورد جدید",
+                                placeholder = "مثلاً: خرید نان، پرداخت قبض...",
+                                leadingIcon = Icons.Default.AddTask,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .onFocusEvent { state ->
+                                        if (state.isFocused) {
+                                            itemCoroutineScope.launch {
+                                                kotlinx.coroutines.delay(220)
+                                                itemBringIntoViewRequester.bringIntoView()
+                                            }
+                                        }
+                                    }
+                            )
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                OutlinedTextField(
-                                    value = newItemText,
-                                    onValueChange = { newItemText = it },
-                                    placeholder = { Text("نام قلم یا کار جدید...", style = MaterialTheme.typography.bodySmall) },
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.weight(1.3f)
-                                )
-                                OutlinedTextField(
-                                    value = if (userPreferences.currency.isEnglishDigits) {
-                                        PersianNumberFormatter.toEnglishDigits(newItemAmountText)
-                                    } else {
-                                        PersianNumberFormatter.toPersianDigits(newItemAmountText)
-                                    },
+                                DodotaTextField(
+                                    value = newItemAmountText,
                                     onValueChange = {
                                         newItemAmountText = PersianNumberFormatter.toEnglishDigits(it).filter { ch -> ch.isDigit() }
                                     },
-                                    placeholder = { Text("مبلغ (${userPreferences.currency.unitName})", style = MaterialTheme.typography.bodySmall) },
-                                    singleLine = true,
+                                    label = "مبلغ (${userPreferences.currency.unitName})",
+                                    placeholder = "اختیاری",
+                                    leadingIcon = Icons.Default.Payments,
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.weight(1f)
+                                    formatNumericWithCommas = true,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .onFocusEvent { state ->
+                                            if (state.isFocused) {
+                                                itemCoroutineScope.launch {
+                                                    kotlinx.coroutines.delay(220)
+                                                    itemBringIntoViewRequester.bringIntoView()
+                                                }
+                                            }
+                                        }
                                 )
-                                FilledIconButton(
+                                Button(
                                     onClick = {
                                         if (newItemText.isNotBlank()) {
                                             val amount = newItemAmountText.toLongOrNull() ?: 0L
@@ -959,11 +685,26 @@ fun ChecklistCard(
                                             newItemAmountText = ""
                                         }
                                     },
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = parsedColor),
-                                    modifier = Modifier.size(46.dp)
+                                    enabled = newItemText.isNotBlank(),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = parsedColor,
+                                        contentColor = Color.White
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                                    modifier = Modifier.padding(top = 4.dp)
                                 ) {
-                                    Icon(Icons.Default.Add, contentDescription = "افزودن قلم", tint = Color.White)
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = "افزودن قلم",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "افزودن",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
                                 }
                             }
 
@@ -984,26 +725,25 @@ fun ChecklistCard(
 
                     // Checklist Items List
                     if (visibleItems.isEmpty()) {
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = if (allChecklistItems.isEmpty()) {
-                                    "هنوز قلمی به این چک‌لیست اضافه نشده است. از کادر بالا اولین مورد را وارد کنید."
-                                } else {
-                                    "موردی با این فیلتر در این لیست وجود ندارد."
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.padding(12.dp)
-                            )
+                        if (allChecklistItems.isNotEmpty()) {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "موردی یافت نشد",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
                         }
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            visibleItems.forEach { item ->
+                            visibleItems.forEachIndexed { index, item ->
                                 ChecklistItemRowCard(
+                                    index = index + 1,
                                     item = item,
                                     accentColor = parsedColor,
                                     currency = userPreferences.currency,
@@ -1029,7 +769,7 @@ fun ChecklistCard(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "پاک‌سازی موارد انجام‌شده (${PersianNumberFormatter.toPersianDigits(completedCount)})",
+                                        text = "پاک‌سازی موارد انجام‌شده (${PersianNumberFormatter.formatDigits(completedCount, userPreferences.currency)})",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -1069,6 +809,7 @@ fun ChecklistCard(
 
 @Composable
 private fun ChecklistItemRowCard(
+    index: Int,
     item: ChecklistItemEntity,
     accentColor: Color,
     currency: AppCurrency,
@@ -1079,141 +820,136 @@ private fun ChecklistItemRowCard(
 ) {
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = if (item.isChecked) IncomeGreen.copy(alpha = 0.08f)
-        else MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+        color = if (item.isChecked) IncomeGreen.copy(alpha = 0.10f)
+        else MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
         border = BorderStroke(
             width = 1.dp,
-            color = if (item.isChecked) IncomeGreen.copy(alpha = 0.4f)
-            else accentColor.copy(alpha = 0.22f)
+            color = if (item.isChecked) IncomeGreen.copy(alpha = 0.55f)
+            else accentColor.copy(alpha = 0.28f)
         ),
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
             .clickable { onToggle() }
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Custom Iconic Check Circle
-            Box(
-                modifier = Modifier
-                    .size(26.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (item.isChecked) IncomeGreen
-                        else accentColor.copy(alpha = 0.12f)
-                    )
-                    .border(
-                        width = 1.5.dp,
-                        color = if (item.isChecked) IncomeGreen else accentColor,
-                        shape = CircleShape
-                    )
-                    .clickable { onToggle() },
-                contentAlignment = Alignment.Center
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
             ) {
-                if (item.isChecked) {
+                // Single Clean Icon for Ticking
+                IconButton(
+                    onClick = onToggle,
+                    modifier = Modifier.size(36.dp)
+                ) {
                     Icon(
-                        Icons.Default.Check,
-                        contentDescription = "تکمیل‌شده",
-                        tint = Color.Black,
+                        imageVector = if (item.isChecked) Icons.Default.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
+                        contentDescription = if (item.isChecked) "انجام شد" else "تیک زدن",
+                        tint = if (item.isChecked) IncomeGreen else accentColor,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        textDecoration = if (item.isChecked) TextDecoration.LineThrough else TextDecoration.None,
+                        color = if (item.isChecked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                    )
+                    if (item.estimatedAmount > 0L) {
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = PersianNumberFormatter.formatCurrency(item.estimatedAmount, currency),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (item.isChecked) IncomeGreen else accentColor
+                            )
+                            if (!item.isExpenseConverted) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = accentColor.copy(alpha = 0.15f),
+                                    border = BorderStroke(0.8.dp, accentColor.copy(alpha = 0.45f)),
+                                    modifier = Modifier.clickable { onConvertToExpense() }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.ReceiptLong,
+                                            contentDescription = null,
+                                            tint = accentColor,
+                                            modifier = Modifier.size(11.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(
+                                            text = "ثبت هزینه",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = accentColor
+                                        )
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = "✓ ثبت در هزینه",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = IncomeGreen
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                IconButton(
+                    onClick = onEdit,
+                    modifier = Modifier.size(30.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Edit,
+                        contentDescription = "ویرایش آیتم",
+                        tint = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.size(16.dp)
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.width(10.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (item.isChecked) FontWeight.Medium else FontWeight.ExtraBold,
-                    textDecoration = if (item.isChecked) TextDecoration.LineThrough else TextDecoration.None,
-                    color = if (item.isChecked) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface
-                )
-                if (item.estimatedAmount > 0L) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = PersianNumberFormatter.formatCurrency(item.estimatedAmount, currency),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = if (item.isChecked) IncomeGreen else accentColor
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(30.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "حذف آیتم",
+                        tint = ExpenseRed.copy(alpha = 0.8f),
+                        modifier = Modifier.size(16.dp)
                     )
                 }
-            }
-
-            if (item.estimatedAmount > 0L && !item.isExpenseConverted) {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = accentColor.copy(alpha = 0.16f),
-                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.45f)),
-                    modifier = Modifier.clickable { onConvertToExpense() }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.ReceiptLong,
-                            contentDescription = null,
-                            tint = accentColor,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "ثبت هزینه",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = accentColor
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(4.dp))
-            } else if (item.isExpenseConverted) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = IncomeGreen.copy(alpha = 0.16f)
-                ) {
-                    Text(
-                        text = "✓ ثبت در هزینه",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = IncomeGreen,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(4.dp))
-            }
-
-            IconButton(
-                onClick = onEdit,
-                modifier = Modifier.size(28.dp)
-            ) {
-                Icon(
-                    Icons.Outlined.Edit,
-                    contentDescription = "ویرایش آیتم",
-                    tint = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.size(15.dp)
-                )
-            }
-
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier.size(28.dp)
-            ) {
-                Icon(
-                    Icons.Default.Close,
-                    contentDescription = "حذف آیتم",
-                    tint = ExpenseRed.copy(alpha = 0.8f),
-                    modifier = Modifier.size(16.dp)
-                )
             }
         }
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun CreateOrEditChecklistDialog(
     existingChecklist: ChecklistEntity?,
@@ -1227,141 +963,130 @@ private fun CreateOrEditChecklistDialog(
     var selectedColor by remember {
         mutableStateOf(existingChecklist?.colorHex ?: COLOR_OPTIONS[1])
     }
+    val titleBringIntoViewRequester = remember { BringIntoViewRequester() }
+    val dialogScope = rememberCoroutineScope()
 
-    Dialog(onDismissRequest = onDismiss) {
-        GlassCard(
-            shape = RoundedCornerShape(26.dp),
-            isHighlighted = true,
+    val accentColor = try {
+        Color(android.graphics.Color.parseColor(selectedColor))
+    } catch (_: Exception) {
+        MaterialTheme.colorScheme.primary
+    }
+
+    GraphicalFormDialog(
+        title = if (existingChecklist == null) "چک‌لیست جدید" else "ویرایش چک‌لیست",
+        icon = Icons.Default.Checklist,
+        accentColor = accentColor,
+        confirmText = if (existingChecklist == null) "ایجاد" else "ذخیره",
+        onConfirm = {
+            if (title.isNotBlank()) {
+                onConfirm(title.trim(), selectedCategory, selectedColor)
+            }
+        },
+        onDismiss = onDismiss,
+        confirmEnabled = title.isNotBlank()
+    ) {
+        DodotaTextField(
+            value = title,
+            onValueChange = { title = it },
+            label = "عنوان لیست",
+            leadingIcon = Icons.Default.Checklist,
+            modifier = Modifier
+                .fillMaxWidth()
+                .bringIntoViewRequester(titleBringIntoViewRequester)
+                .onFocusEvent { state ->
+                    if (state.isFocused) {
+                        dialogScope.launch {
+                            kotlinx.coroutines.delay(220)
+                            titleBringIntoViewRequester.bringIntoView()
+                        }
+                    }
+                }
+        )
+
+        Text(
+            text = "دسته‌بندی:",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold
+        )
+
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Text(
-                    text = if (existingChecklist == null) "ساخت چک‌لیست هوشمند جدید" else "ویرایش چک‌لیست",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold
-                )
-
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("عنوان لیست (مثال: خرید هفتگی، سفر شمال، اقساط ماه)") },
-                    singleLine = true,
+            items(CHECKLIST_CATEGORY_STYLES.drop(1)) { style ->
+                val isSel = selectedCategory == style.title
+                Surface(
                     shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text(
-                    text = "انتخاب دسته‌بندی:",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
-
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(CHECKLIST_CATEGORY_STYLES.drop(1)) { style ->
-                        val isSel = selectedCategory == style.title
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (isSel) style.accentColor.copy(alpha = 0.2f)
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            border = BorderStroke(
-                                1.dp,
-                                if (isSel) style.accentColor else Color.Transparent
-                            ),
-                            modifier = Modifier.clickable {
-                                selectedCategory = style.title
-                                if (existingChecklist == null) {
-                                    selectedColor = style.defaultColorHex
-                                }
-                            }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    style.icon,
-                                    contentDescription = null,
-                                    tint = style.accentColor,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = style.title,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSel) style.accentColor else MaterialTheme.colorScheme.onSurface
-                                )
-                            }
+                    color = if (isSel) style.accentColor.copy(alpha = 0.2f)
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isSel) style.accentColor else Color.Transparent
+                    ),
+                    modifier = Modifier.clickable {
+                        selectedCategory = style.title
+                        if (existingChecklist == null) {
+                            selectedColor = style.defaultColorHex
                         }
                     }
-                }
-
-                Text(
-                    text = "تم رنگی کارت:",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    COLOR_OPTIONS.forEach { hex ->
-                        val color = try {
-                            Color(android.graphics.Color.parseColor(hex))
-                        } catch (_: Exception) {
-                            MaterialTheme.colorScheme.primary
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(color)
-                                .border(
-                                    width = if (selectedColor == hex) 2.5.dp else 0.dp,
-                                    color = if (selectedColor == hex) Color.White else Color.Transparent,
-                                    shape = CircleShape
-                                )
-                                .clickable { selectedColor = hex },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (selectedColor == hex) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("انصراف")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            if (title.isNotBlank()) {
-                                onConfirm(title.trim(), selectedCategory, selectedColor)
-                            }
-                        },
-                        shape = RoundedCornerShape(12.dp)
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Icon(
+                            style.icon,
+                            contentDescription = null,
+                            tint = style.accentColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (existingChecklist == null) "ایجاد چک‌لیست" else "ذخیره تغییرات",
-                            fontWeight = FontWeight.Bold
+                            text = style.title,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSel) style.accentColor else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+
+        Text(
+            text = "رنگ کارت:",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            COLOR_OPTIONS.forEach { hex ->
+                val color = try {
+                    Color(android.graphics.Color.parseColor(hex))
+                } catch (_: Exception) {
+                    MaterialTheme.colorScheme.primary
+                }
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(color)
+                        .border(
+                            width = if (selectedColor == hex) 2.5.dp else 0.dp,
+                            color = if (selectedColor == hex) Color.White else Color.Transparent,
+                            shape = CircleShape
+                        )
+                        .clickable { selectedColor = hex },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (selectedColor == hex) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
@@ -1382,44 +1107,31 @@ private fun EditChecklistItemDialog(
         mutableStateOf(if (item.estimatedAmount > 0) item.estimatedAmount.toString() else "")
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("ویرایش قلم چک‌لیست", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    label = { Text("عنوان قلم یا کار") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                PersianAmountInput(
-                    value = amountText,
-                    onValueChange = { amountText = it },
-                    currency = currency,
-                    label = "مبلغ برآوردی (اختیاری)"
-                )
+    GraphicalFormDialog(
+        title = "ویرایش مورد",
+        icon = Icons.Default.AddTask,
+        onConfirm = {
+            if (text.isNotBlank()) {
+                onSave(text.trim(), PersianNumberFormatter.parseAmount(amountText))
             }
         },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (text.isNotBlank()) {
-                        onSave(text.trim(), PersianNumberFormatter.parseAmount(amountText))
-                    }
-                }
-            ) {
-                Text("ذخیره")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("انصراف")
-            }
-        }
-    )
+        onDismiss = onDismiss,
+        confirmEnabled = text.isNotBlank()
+    ) {
+        DodotaTextField(
+            value = text,
+            onValueChange = { text = it },
+            label = "نام:",
+            leadingIcon = Icons.Default.AddTask,
+            modifier = Modifier.fillMaxWidth()
+        )
+        PersianAmountInput(
+            value = amountText,
+            onValueChange = { amountText = it },
+            currency = currency,
+            label = "مبلغ"
+        )
+    }
 }
 
 @Composable
@@ -1437,73 +1149,60 @@ fun ConvertToExpenseDialog(
         mutableStateOf<Long?>(categories.firstOrNull { it.type == TransactionType.EXPENSE }?.id)
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("ثبت قلم چک‌لیست در هزینه‌ها", fontWeight = FontWeight.ExtraBold) },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = IncomeGreen.copy(alpha = 0.14f),
-                    border = BorderStroke(1.dp, IncomeGreen.copy(alpha = 0.4f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            text = item.text,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                        Text(
-                            text = "مبلغ: ${PersianNumberFormatter.formatCurrency(item.estimatedAmount, userPreferences.currency)} • لیست: $checklistTitle",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = IncomeGreen,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                Text("کسر از حساب:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(accounts) { acc ->
-                        FilterChip(
-                            selected = selectedAccountId == acc.id,
-                            onClick = { selectedAccountId = acc.id },
-                            label = { Text(acc.name) }
-                        )
-                    }
-                }
-
-                Text("دسته‌بندی هزینه:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(categories.filter { it.type == TransactionType.EXPENSE }) { cat ->
-                        FilterChip(
-                            selected = selectedCategoryId == cat.id,
-                            onClick = { selectedCategoryId = cat.id },
-                            label = { Text(cat.name) }
-                        )
-                    }
-                }
+    GraphicalFormDialog(
+        title = "ثبت هزینه",
+        icon = Icons.Default.ReceiptLong,
+        accentColor = IncomeGreen,
+        confirmText = "ثبت",
+        onConfirm = {
+            if (selectedAccountId != 0L) {
+                onConfirm(selectedAccountId, selectedCategoryId)
             }
         },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (selectedAccountId != 0L) {
-                        onConfirm(selectedAccountId, selectedCategoryId)
-                    }
-                }
-            ) {
-                Text("ثبت در حسابداری ✓", fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("انصراف")
+        onDismiss = onDismiss,
+        confirmEnabled = selectedAccountId != 0L
+    ) {
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = IncomeGreen.copy(alpha = 0.14f),
+            border = BorderStroke(1.dp, IncomeGreen.copy(alpha = 0.4f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    text = item.text,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    text = "${PersianNumberFormatter.formatCurrency(item.estimatedAmount, userPreferences.currency)} • $checklistTitle",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = IncomeGreen,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
-    )
+
+        Text("حساب:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(accounts) { acc ->
+                FilterChip(
+                    selected = selectedAccountId == acc.id,
+                    onClick = { selectedAccountId = acc.id },
+                    label = { Text(acc.name) }
+                )
+            }
+        }
+
+        Text("دسته‌بندی:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(categories.filter { it.type == TransactionType.EXPENSE }) { cat ->
+                FilterChip(
+                    selected = selectedCategoryId == cat.id,
+                    onClick = { selectedCategoryId = cat.id },
+                    label = { Text(cat.name) }
+                )
+            }
+        }
+    }
 }

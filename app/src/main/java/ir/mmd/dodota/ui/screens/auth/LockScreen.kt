@@ -39,11 +39,12 @@ fun LockScreen(
 ) {
     var enteredPin by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
+    var isUnlocked by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     // Trigger biometric prompt on launch if enabled
     LaunchedEffect(userPreferences.isBiometricEnabled) {
-        if (userPreferences.isBiometricEnabled && context is FragmentActivity) {
+        if (userPreferences.isBiometricEnabled && context is FragmentActivity && !isUnlocked) {
             try {
                 val executor = ContextCompat.getMainExecutor(context)
                 val biometricPrompt = BiometricPrompt(
@@ -52,7 +53,10 @@ fun LockScreen(
                     object : BiometricPrompt.AuthenticationCallback() {
                         override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                             super.onAuthenticationSucceeded(result)
-                            onUnlocked()
+                            if (!isUnlocked) {
+                                isUnlocked = true
+                                onUnlocked()
+                            }
                         }
                         override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                             super.onAuthenticationError(errorCode, errString)
@@ -64,6 +68,7 @@ fun LockScreen(
                     .setTitle("ورود به دودوتا")
                     .setSubtitle("احراز هویت بیومتریک")
                     .setNegativeButtonText("ورود با رمز")
+                    .setConfirmationRequired(false)
                     .build()
 
                 biometricPrompt.authenticate(promptInfo)
@@ -73,6 +78,7 @@ fun LockScreen(
     }
 
     fun handleDigitPress(digit: String) {
+        if (isUnlocked) return
         if (enteredPin.length < 6) {
             val newPin = enteredPin + digit
             enteredPin = newPin
@@ -80,6 +86,7 @@ fun LockScreen(
 
             if (newPin.length >= 4) {
                 if (SecurityHelper.verifyPin(newPin, userPreferences.pinHash)) {
+                    isUnlocked = true
                     onUnlocked()
                 } else if (newPin.length == 6) {
                     isError = true

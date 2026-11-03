@@ -27,6 +27,7 @@ import ir.mmd.dodota.data.model.*
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.ui.components.CategoryIconView
 import ir.mmd.dodota.ui.components.DodotaExpandableSelector
+import ir.mmd.dodota.ui.components.DodotaTextField
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.EmptyStateCard
 import ir.mmd.dodota.ui.components.GlassCard
@@ -51,7 +52,7 @@ fun TransactionsScreen(
     transactions: List<TransactionEntity>,
     accounts: List<AccountEntity>,
     categories: List<CategoryEntity>,
-    onNavigateToAdd: () -> Unit,
+    onNavigateToAdd: (TransactionType) -> Unit,
     onNavigateToEdit: (Long) -> Unit,
     onDeleteToTrash: (TransactionEntity) -> Unit
 ) {
@@ -141,13 +142,11 @@ fun TransactionsScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = onNavigateToAdd,
+                onClick = { onNavigateToAdd(selectedTypeFilter ?: TransactionType.EXPENSE) },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = RoundedCornerShape(18.dp),
-                modifier = Modifier
-                    .padding(bottom = 4.dp)
-                    .testTag("add_transaction_fab")
+                modifier = Modifier.testTag("add_transaction_fab")
             ) {
                 Icon(Icons.Default.Add, contentDescription = "افزودن تراکنش")
             }
@@ -159,21 +158,21 @@ fun TransactionsScreen(
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
+            Spacer(modifier = Modifier.height(6.dp))
+
             // Smart Search Box
-            OutlinedTextField(
+            DodotaTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("جستجو (مثلاً: خرید های بالای ۵۰۰ هزار، خوراک...)") },
-                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
+                label = "جستجو (مثلاً: خریدهای بالای ۵۰۰ هزار، خوراک...)",
+                leadingIcon = Icons.Outlined.Search,
+                trailingContent = if (searchQuery.isNotEmpty()) {
+                    {
                         IconButton(onClick = { searchQuery = "" }) {
                             Icon(Icons.Default.Clear, contentDescription = "پاک کردن")
                         }
                     }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
+                } else null,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp)
@@ -268,7 +267,7 @@ fun TransactionsScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 100.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 84.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(filteredTransactions, key = { it.id }) { tx ->
@@ -279,7 +278,9 @@ fun TransactionsScreen(
                         GlassCard(
                             shape = RoundedCornerShape(20.dp),
                             borderColor = if (tx.isPinned) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) else null,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .animateItem(),
                             onClick = { onNavigateToEdit(tx.id) }
                         ) {
                             Row(
@@ -322,6 +323,15 @@ fun TransactionsScreen(
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
+                                        if (!tx.receiptUri.isNullOrBlank()) {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Icon(
+                                                Icons.Default.Receipt,
+                                                contentDescription = "دارای تصویر سند",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
                                     }
 
                                     Spacer(modifier = Modifier.height(2.dp))
@@ -460,8 +470,15 @@ fun TransactionsScreen(
                         }
                     }
 
-                    // Collapsible Category Filter
-                    val selectedCatObj = categories.firstOrNull { it.id == selectedCategoryId }
+                    // Collapsible Category Filter (only shows categories of the active type if filtered)
+                    val availableCategoriesForFilter = remember(categories, selectedTypeFilter) {
+                        if (selectedTypeFilter != null) {
+                            categories.filter { it.type == selectedTypeFilter }
+                        } else {
+                            categories
+                        }
+                    }
+                    val selectedCatObj = availableCategoriesForFilter.firstOrNull { it.id == selectedCategoryId }
                     DodotaExpandableSelector(
                         label = "فیلتر بر اساس دسته‌بندی",
                         selectedTitle = selectedCatObj?.name ?: "همه دسته‌بندی‌ها"
@@ -478,7 +495,7 @@ fun TransactionsScreen(
                         ) {
                             Text("همه دسته‌بندی‌ها", modifier = Modifier.padding(10.dp), fontWeight = FontWeight.Bold)
                         }
-                        categories.forEach { cat ->
+                        availableCategoriesForFilter.forEach { cat ->
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
                                 color = if (selectedCategoryId == cat.id) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,

@@ -193,6 +193,7 @@ fun ReportsScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
                 title = "آمار و نمودارهای هوشمند",

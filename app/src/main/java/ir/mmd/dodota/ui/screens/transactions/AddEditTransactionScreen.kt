@@ -214,7 +214,7 @@ fun AddEditTransactionScreen(
     }
 
     Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
                 title = screenHeaderTitle,
@@ -237,6 +237,8 @@ fun AddEditTransactionScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .imePadding()
+                .navigationBarsPadding()
                 .background(MaterialTheme.colorScheme.background)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -305,27 +307,14 @@ fun AddEditTransactionScreen(
                     selectedType == TransactionType.INCOME -> "توضیحات سایر درآمدها (بنویسید این درآمد چیست)"
                     else -> "توضیحات سایر هزینه‌ها (بنویسید این هزینه چیست)"
                 }
-                OutlinedTextField(
+                DodotaTextField(
                     value = otherCategoryDescription,
                     onValueChange = {
                         otherCategoryDescription = it
                         title = it
                     },
-                    label = { Text(fieldLabel) },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Default.EditNote,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    },
-                    shape = RoundedCornerShape(18.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                        focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f)
-                    ),
+                    label = fieldLabel,
+                    leadingIcon = Icons.Default.EditNote,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -361,6 +350,7 @@ fun AddEditTransactionScreen(
 
                     GlassCard(
                         shape = RoundedCornerShape(20.dp),
+                        elevation = 8.dp,
                         borderColor = statusColor.copy(alpha = 0.6f),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -390,7 +380,7 @@ fun AddEditTransactionScreen(
                                     color = statusColor.copy(alpha = 0.16f)
                                 ) {
                                     Text(
-                                        text = "${PersianNumberFormatter.toPersianDigits(rawPercent)}٪ مصرف",
+                                        text = "${PersianNumberFormatter.formatDigits(rawPercent, userPreferences.currency)}٪ مصرف",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = statusColor,
@@ -516,6 +506,7 @@ fun AddEditTransactionScreen(
             // 4. Date Picker Card
             GlassCard(
                 shape = RoundedCornerShape(20.dp),
+                elevation = 8.dp,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { showDatePicker = true }
             ) {
@@ -563,25 +554,12 @@ fun AddEditTransactionScreen(
 
             // 5. Title / Subject Input (if not already using the "Other" category description box)
             if (!isOtherOrTransferCategory) {
-                OutlinedTextField(
+                DodotaTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("عنوان یا شرح کوتاه") },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Default.Subtitles,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(18.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.38f),
-                        focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f)
-                    ),
+                    label = "عنوان یا شرح کوتاه",
+                    placeholder = "مثلاً خرید از فروشگاه، کافه و...",
+                    leadingIcon = Icons.Default.Subtitles,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -596,7 +574,8 @@ fun AddEditTransactionScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     // Receipt Image Picker & Persistent Preview (Item 26)
                     Surface(
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(18.dp),
+                        shadowElevation = 4.dp,
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
                         border = BorderStroke(
                             1.dp,
@@ -704,21 +683,22 @@ fun AddEditTransactionScreen(
                         }
                     }
 
-                    OutlinedTextField(
+                    DodotaTextField(
                         value = note,
                         onValueChange = { note = it },
-                        label = { Text("یادداشت و توضیحات سند") },
+                        label = "یادداشت و توضیحات سند",
+                        leadingIcon = Icons.Default.Notes,
+                        singleLine = false,
                         minLines = 2,
-                        shape = RoundedCornerShape(16.dp),
+                        maxLines = 4,
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    OutlinedTextField(
+                    DodotaTextField(
                         value = tags,
                         onValueChange = { tags = it },
-                        label = { Text("برچسب‌ها (با ویرگول جدا کنید)") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
+                        label = "برچسب‌ها (با ویرگول جدا کنید)",
+                        leadingIcon = Icons.Default.Label,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -803,12 +783,12 @@ fun AddEditTransactionScreen(
                                 val alertTitle = if (totalSpentNow > categoryBudget.monthlyAmount) {
                                     "⚠️ عبور از سقف بودجه «$catTitle»!"
                                 } else {
-                                    "⚠️ هشدار مصرف بودجه «$catTitle» (${PersianNumberFormatter.toPersianDigits(newPercent)}٪)"
+                                    "⚠️ هشدار مصرف بودجه «$catTitle» (${PersianNumberFormatter.formatDigits(newPercent, userPreferences.currency)}٪)"
                                 }
                                 val alertBody = if (remainingAfter >= 0) {
-                                    "مصرف شما در دسته «$catTitle» به ${PersianNumberFormatter.toPersianDigits(newPercent)}٪ رسید. باقی‌مانده بودجه: ${PersianNumberFormatter.formatCurrency(remainingAfter, userPreferences.currency)}"
+                                    "مصرف شما در دسته «$catTitle» به ${PersianNumberFormatter.formatDigits(newPercent, userPreferences.currency)}٪ رسید. باقی‌مانده بودجه: ${PersianNumberFormatter.formatCurrency(remainingAfter, userPreferences.currency)}"
                                 } else {
-                                    "مصرف شما در دسته «$catTitle» به ${PersianNumberFormatter.toPersianDigits(newPercent)}٪ رسید و به مبلغ ${PersianNumberFormatter.formatCurrency(kotlin.math.abs(remainingAfter), userPreferences.currency)} از سقف بودجه رد شد!"
+                                    "مصرف شما در دسته «$catTitle» به ${PersianNumberFormatter.formatDigits(newPercent, userPreferences.currency)}٪ رسید و به مبلغ ${PersianNumberFormatter.formatCurrency(kotlin.math.abs(remainingAfter), userPreferences.currency)} از سقف بودجه رد شد!"
                                 }
 
                                 NotificationHelper.showFinancialNotification(
@@ -829,6 +809,7 @@ fun AddEditTransactionScreen(
                     }
                 },
                 shape = RoundedCornerShape(18.dp),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("save_transaction_button")

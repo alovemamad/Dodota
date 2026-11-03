@@ -3,4 +3,7 @@
     <string name="developer_name">Mmd</string>
     <string name="telegram_support_id">momo1f</string>
     <string name="app_description">مدیریت هوشمند درآمد، هزینه، بدهی، اقساط و پس‌انداز</string>
+    <string name="installments_title">اقساط</string>
+    <string name="goals_title">اهداف</string>
+    <string name="checklists_title">چک‌لیست</string>
 </resources>

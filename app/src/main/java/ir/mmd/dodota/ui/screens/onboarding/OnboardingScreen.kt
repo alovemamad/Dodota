@@ -39,6 +39,7 @@ import ir.mmd.dodota.data.model.AppCurrency
 import ir.mmd.dodota.data.model.AppThemeMode
 import ir.mmd.dodota.data.preferences.UserPreferencesRepository
 import ir.mmd.dodota.data.repository.DodotaRepository
+import ir.mmd.dodota.ui.components.DodotaTextField
 import ir.mmd.dodota.ui.components.GlassCard
 import ir.mmd.dodota.ui.components.PersianAmountInput
 import ir.mmd.dodota.util.PersianNumberFormatter
@@ -58,6 +59,7 @@ fun OnboardingScreen(
 
     // State collected across steps
     var selectedCurrency by remember { mutableStateOf(AppCurrency.TOMAN) }
+    var useEnglishDigits by remember { mutableStateOf(false) }
     var selectedTheme by remember { mutableStateOf(AppThemeMode.VIP_RED) }
     var accountName by remember { mutableStateOf("کارت بانکی اصلی") }
     var selectedAccountType by remember { mutableStateOf(AccountType.BANK_CARD) }
@@ -69,8 +71,27 @@ fun OnboardingScreen(
     var enableBiometric by remember { mutableStateOf(false) }
     var enableWeeklyBackup by remember { mutableStateOf(true) }
 
+    // Keep global digit language in sync immediately when user changes currency or digit language
+    LaunchedEffect(selectedCurrency) {
+        useEnglishDigits = selectedCurrency.isEnglishDigits
+        PersianNumberFormatter.globalUseEnglishDigits = selectedCurrency.isEnglishDigits
+        preferencesRepo.setCurrency(selectedCurrency)
+    }
+
+    val updateDigitLanguage: (Boolean) -> Unit = { english ->
+        useEnglishDigits = english
+        PersianNumberFormatter.globalUseEnglishDigits = english
+        selectedCurrency = when {
+            english && (selectedCurrency == AppCurrency.TOMAN || selectedCurrency == AppCurrency.TOMAN_ENGLISH) -> AppCurrency.TOMAN_ENGLISH
+            english && (selectedCurrency == AppCurrency.RIAL || selectedCurrency == AppCurrency.RIAL_ENGLISH) -> AppCurrency.RIAL_ENGLISH
+            !english && (selectedCurrency == AppCurrency.TOMAN || selectedCurrency == AppCurrency.TOMAN_ENGLISH) -> AppCurrency.TOMAN
+            else -> AppCurrency.RIAL
+        }
+    }
+
     val completeFast = {
         coroutineScope.launch {
+            PersianNumberFormatter.globalUseEnglishDigits = selectedCurrency.isEnglishDigits
             preferencesRepo.setCurrency(selectedCurrency)
             preferencesRepo.setThemeMode(selectedTheme)
             val balance = PersianNumberFormatter.parseAmount(initialBalanceText)
@@ -87,14 +108,17 @@ fun OnboardingScreen(
         }
     }
 
-    Surface(
+    Scaffold(
         modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets.safeDrawing
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp)
+                .padding(innerPadding)
+                .imePadding()
+                .padding(horizontal = 24.dp, vertical = 16.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
@@ -108,7 +132,7 @@ fun OnboardingScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "گام ${PersianNumberFormatter.toPersianDigits(step.toString())} از ۵",
+                    text = "گام ${PersianNumberFormatter.formatDigits(step, useEnglishDigits)} از ${PersianNumberFormatter.formatDigits(5, useEnglishDigits)}",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
@@ -122,7 +146,7 @@ fun OnboardingScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 24.dp),
+                    .padding(bottom = 20.dp),
                 horizontalArrangement = Arrangement.Center
             ) {
                 (1..5).forEach { i ->
@@ -155,10 +179,10 @@ fun OnboardingScreen(
                 ) {
                     when (currentStep) {
                         1 -> {
-                            // Step 1: Welcome, Currency & VIP Red Theme
+                            // Step 1: Welcome, Digit Language & Currency
                             Box(
                                 modifier = Modifier
-                                    .size(90.dp)
+                                    .size(84.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
                                     .border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape),
@@ -168,74 +192,115 @@ fun OnboardingScreen(
                                     painter = painterResource(id = R.drawable.dodota_app_icon_v2),
                                     contentDescription = "دودوتا",
                                     modifier = Modifier
-                                        .size(68.dp)
+                                        .size(64.dp)
                                         .clip(CircleShape)
                                 )
                             }
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(14.dp))
                             Text(
                                 text = "به «دودوتا» خوش آمدید",
                                 style = MaterialTheme.typography.headlineMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = "حساب و کتاب دخل و خرج، اقساط، چک‌ها و بودجه‌بندی با طراحی شیشه‌ای VIP Red",
                                 style = MaterialTheme.typography.bodyMedium,
                                 textAlign = TextAlign.Center,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(modifier = Modifier.height(24.dp))
+                            Spacer(modifier = Modifier.height(20.dp))
 
-                            Text(
-                                text = "واحد پول پیش‌فرض را انتخاب کنید:",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            GlassCard(
+                                shape = RoundedCornerShape(22.dp),
+                                elevation = 8.dp,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    CurrencyOptionCard(
-                                        title = "تومان",
-                                        subtitle = "با ارقام فارسی (۱۲,۰۰۰)",
-                                        isSelected = selectedCurrency == AppCurrency.TOMAN,
-                                        onClick = { selectedCurrency = AppCurrency.TOMAN },
-                                        modifier = Modifier.weight(1f)
+                                    Text(
+                                        text = "زبان نمایش اعداد در کل برنامه:",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.primary
                                     )
-                                    CurrencyOptionCard(
-                                        title = "ریال",
-                                        subtitle = "با ارقام فارسی (۱۲۰,۰۰۰)",
-                                        isSelected = selectedCurrency == AppCurrency.RIAL,
-                                        onClick = { selectedCurrency = AppCurrency.RIAL },
-                                        modifier = Modifier.weight(1f)
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        CurrencyOptionCard(
+                                            title = "فارسی",
+                                            subtitle = "ارقام فارسی (۱,۲۵۰,۰۰۰)",
+                                            isSelected = !useEnglishDigits,
+                                            onClick = { updateDigitLanguage(false) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        CurrencyOptionCard(
+                                            title = "انگلیسی",
+                                            subtitle = "ارقام انگلیسی (1,250,000)",
+                                            isSelected = useEnglishDigits,
+                                            onClick = { updateDigitLanguage(true) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "واحد پول پیش‌فرض را انتخاب کنید:",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.ExtraBold
                                     )
-                                }
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    CurrencyOptionCard(
-                                        title = "تومان (EN)",
-                                        subtitle = "با ارقام انگلیسی (12,000)",
-                                        isSelected = selectedCurrency == AppCurrency.TOMAN_ENGLISH,
-                                        onClick = { selectedCurrency = AppCurrency.TOMAN_ENGLISH },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    CurrencyOptionCard(
-                                        title = "ریال (EN)",
-                                        subtitle = "با ارقام انگلیسی (120,000)",
-                                        isSelected = selectedCurrency == AppCurrency.RIAL_ENGLISH,
-                                        onClick = { selectedCurrency = AppCurrency.RIAL_ENGLISH },
-                                        modifier = Modifier.weight(1f)
-                                    )
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            CurrencyOptionCard(
+                                                title = "تومان",
+                                                subtitle = "با ارقام فارسی (۱۲,۰۰۰)",
+                                                isSelected = selectedCurrency == AppCurrency.TOMAN,
+                                                onClick = { selectedCurrency = AppCurrency.TOMAN },
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            CurrencyOptionCard(
+                                                title = "ریال",
+                                                subtitle = "با ارقام فارسی (۱۲۰,۰۰۰)",
+                                                isSelected = selectedCurrency == AppCurrency.RIAL,
+                                                onClick = { selectedCurrency = AppCurrency.RIAL },
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            CurrencyOptionCard(
+                                                title = "تومان (EN)",
+                                                subtitle = "با ارقام انگلیسی (12,000)",
+                                                isSelected = selectedCurrency == AppCurrency.TOMAN_ENGLISH,
+                                                onClick = { selectedCurrency = AppCurrency.TOMAN_ENGLISH },
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            CurrencyOptionCard(
+                                                title = "ریال (EN)",
+                                                subtitle = "با ارقام انگلیسی (120,000)",
+                                                isSelected = selectedCurrency == AppCurrency.RIAL_ENGLISH,
+                                                onClick = { selectedCurrency = AppCurrency.RIAL_ENGLISH },
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -263,22 +328,35 @@ fun OnboardingScreen(
                             )
                             Spacer(modifier = Modifier.height(20.dp))
 
-                            OutlinedTextField(
-                                value = accountName,
-                                onValueChange = { accountName = it },
-                                label = { Text("نام حساب یا کارت") },
-                                singleLine = true,
-                                shape = RoundedCornerShape(16.dp),
+                            GlassCard(
+                                shape = RoundedCornerShape(22.dp),
+                                elevation = 8.dp,
                                 modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    DodotaTextField(
+                                        value = accountName,
+                                        onValueChange = { accountName = it },
+                                        label = "نام حساب یا کارت",
+                                        placeholder = "مثلاً کارت بانکی اصلی",
+                                        leadingIcon = Icons.Default.CreditCard,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
 
-                            PersianAmountInput(
-                                value = initialBalanceText,
-                                onValueChange = { initialBalanceText = it },
-                                currency = selectedCurrency,
-                                label = "موجودی اولیه (اختیاری)"
-                            )
+                                    PersianAmountInput(
+                                        value = initialBalanceText,
+                                        onValueChange = { initialBalanceText = it },
+                                        currency = selectedCurrency,
+                                        label = "موجودی اولیه (اختیاری)",
+                                        leadingIcon = Icons.Default.AccountBalanceWallet
+                                    )
+                                }
+                            }
                         }
 
                         3 -> {
@@ -306,6 +384,7 @@ fun OnboardingScreen(
 
                             GlassCard(
                                 shape = RoundedCornerShape(20.dp),
+                                elevation = 8.dp,
                                 modifier = Modifier.fillMaxWidth(),
                                 onClick = { enableAppLock = !enableAppLock }
                             ) {
@@ -337,27 +416,43 @@ fun OnboardingScreen(
 
                             if (enableAppLock) {
                                 Spacer(modifier = Modifier.height(16.dp))
-                                OutlinedTextField(
-                                    value = pinText,
-                                    onValueChange = { if (it.length <= 6 && it.all { c -> c.isDigit() }) pinText = it },
-                                    label = { Text("رمز عبور (۴ تا ۶ رقم)") },
-                                    visualTransformation = PasswordVisualTransformation(),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(16.dp),
+                                GlassCard(
+                                    shape = RoundedCornerShape(20.dp),
+                                    elevation = 6.dp,
                                     modifier = Modifier.fillMaxWidth()
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                OutlinedTextField(
-                                    value = confirmPinText,
-                                    onValueChange = { if (it.length <= 6 && it.all { c -> c.isDigit() }) confirmPinText = it },
-                                    label = { Text("تکرار رمز عبور") },
-                                    visualTransformation = PasswordVisualTransformation(),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(16.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        DodotaTextField(
+                                            value = pinText,
+                                            onValueChange = {
+                                                val norm = PersianNumberFormatter.toEnglishDigits(it).filter { c -> c.isDigit() }
+                                                if (norm.length <= 6) pinText = norm
+                                            },
+                                            label = "رمز عبور (${PersianNumberFormatter.formatDigits("4", useEnglishDigits)} تا ${PersianNumberFormatter.formatDigits("6", useEnglishDigits)} رقم)",
+                                            leadingIcon = Icons.Default.Lock,
+                                            visualTransformation = PasswordVisualTransformation(),
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        DodotaTextField(
+                                            value = confirmPinText,
+                                            onValueChange = {
+                                                val norm = PersianNumberFormatter.toEnglishDigits(it).filter { c -> c.isDigit() }
+                                                if (norm.length <= 6) confirmPinText = norm
+                                            },
+                                            label = "تکرار رمز عبور",
+                                            leadingIcon = Icons.Default.VerifiedUser,
+                                            visualTransformation = PasswordVisualTransformation(),
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                }
                             }
                         }
 
@@ -385,11 +480,12 @@ fun OnboardingScreen(
                             Spacer(modifier = Modifier.height(24.dp))
 
                             Surface(
-                                shape = RoundedCornerShape(16.dp),
+                                shape = RoundedCornerShape(18.dp),
+                                shadowElevation = 6.dp,
                                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp))
+                                    .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(18.dp))
                             ) {
                                 Column(
                                     modifier = Modifier.padding(20.dp),
@@ -460,7 +556,9 @@ fun OnboardingScreen(
 
             // Navigation Buttons (Next / Skip / Finish)
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -493,6 +591,7 @@ fun OnboardingScreen(
                         } else {
                             // Finish Onboarding
                             coroutineScope.launch {
+                                PersianNumberFormatter.globalUseEnglishDigits = selectedCurrency.isEnglishDigits
                                 preferencesRepo.setCurrency(selectedCurrency)
                                 preferencesRepo.setThemeMode(selectedTheme)
 
@@ -549,6 +648,7 @@ fun CurrencyOptionCard(
 ) {
     Card(
         shape = RoundedCornerShape(18.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 6.dp else 2.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer
             else MaterialTheme.colorScheme.surfaceVariant
@@ -559,12 +659,12 @@ fun CurrencyOptionCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(14.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
             )

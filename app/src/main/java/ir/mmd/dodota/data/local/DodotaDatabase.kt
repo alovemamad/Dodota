@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
         ChecklistEntity::class,
         ChecklistItemEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class DodotaDatabase : RoomDatabase() {
@@ -84,23 +84,59 @@ abstract class DodotaDatabase : RoomDatabase() {
             }
         }
 
+        private fun hasColumn(
+            db: SupportSQLiteDatabase,
+            tableName: String,
+            columnName: String
+        ): Boolean {
+            db.query("PRAGMA table_info(`$tableName`)").use { cursor ->
+                val nameIndex = cursor.getColumnIndex("name")
+                if (nameIndex == -1) return false
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(nameIndex).equals(columnName, ignoreCase = true)) {
+                        return true
+                    }
+                }
+            }
+            return false
+        }
+
+        private fun addColumnIfNotExists(
+            db: SupportSQLiteDatabase,
+            tableName: String,
+            columnName: String,
+            columnDefinition: String
+        ) {
+            if (!hasColumn(db, tableName, columnName)) {
+                db.execSQL("ALTER TABLE `$tableName` ADD COLUMN `$columnName` $columnDefinition")
+            }
+        }
+
         private val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE `debts` ADD COLUMN `isCheck` INTEGER NOT NULL DEFAULT 0")
-                db.execSQL("ALTER TABLE `debts` ADD COLUMN `checkNumber` TEXT NOT NULL DEFAULT ''")
+                addColumnIfNotExists(db, "debts", "isCheck", "INTEGER NOT NULL DEFAULT 0")
+                addColumnIfNotExists(db, "debts", "checkNumber", "TEXT NOT NULL DEFAULT ''")
             }
         }
 
         private val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE `accounts` ADD COLUMN `cardNumber` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `accounts` ADD COLUMN `shebaNumber` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `accounts` ADD COLUMN `accountNumber` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `accounts` ADD COLUMN `cvv2` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `accounts` ADD COLUMN `expiryDate` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `accounts` ADD COLUMN `cardHolderName` TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE `installment_plans` ADD COLUMN `totalLoanAmount` INTEGER NOT NULL DEFAULT 0")
-                db.execSQL("INSERT INTO `categories` (`name`, `type`, `iconName`, `colorHex`, `isDefault`, `parentCategoryId`) VALUES ('انتقال به شخص دیگر', 'EXPENSE', 'swap_horiz', '#0EA5E9', 1, NULL)")
+                addColumnIfNotExists(db, "accounts", "cardNumber", "TEXT NOT NULL DEFAULT ''")
+                addColumnIfNotExists(db, "accounts", "shebaNumber", "TEXT NOT NULL DEFAULT ''")
+                addColumnIfNotExists(db, "accounts", "accountNumber", "TEXT NOT NULL DEFAULT ''")
+                addColumnIfNotExists(db, "accounts", "cvv2", "TEXT NOT NULL DEFAULT ''")
+                addColumnIfNotExists(db, "accounts", "expiryDate", "TEXT NOT NULL DEFAULT ''")
+                addColumnIfNotExists(db, "accounts", "cardHolderName", "TEXT NOT NULL DEFAULT ''")
+                addColumnIfNotExists(db, "installment_plans", "totalLoanAmount", "INTEGER NOT NULL DEFAULT 0")
+                try {
+                    db.execSQL("INSERT INTO `categories` (`name`, `type`, `iconName`, `colorHex`, `isDefault`, `parentCategoryId`) VALUES ('انتقال به شخص دیگر', 'EXPENSE', 'swap_horiz', '#0EA5E9', 1, NULL)")
+                } catch (_: Exception) {}
+            }
+        }
+
+        private val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                addColumnIfNotExists(db, "installment_plans", "totalLoanAmount", "INTEGER NOT NULL DEFAULT 0")
             }
         }
 
@@ -111,7 +147,7 @@ abstract class DodotaDatabase : RoomDatabase() {
                     DodotaDatabase::class.java,
                     "dodota_finance.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .fallbackToDestructiveMigration(true)
                     .fallbackToDestructiveMigrationOnDowngrade(true)
                     .addCallback(DatabaseCallback(context))

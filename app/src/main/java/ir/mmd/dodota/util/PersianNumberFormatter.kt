@@ -4,6 +4,7 @@ import ir.mmd.dodota.data.model.AppCurrency
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
+import kotlin.math.abs
 
 object PersianNumberFormatter {
     private val persianDigits = charArrayOf('۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹')
@@ -11,39 +12,65 @@ object PersianNumberFormatter {
     private val arabicDigits = charArrayOf('٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩')
 
     /**
-     * Global digit language state synced from UserPreferences.currency.isEnglishDigits
-     * When true, all numbers across the entire application are rendered in English digits (0-9).
+     * Global digit language state synced from UserPreferences.currency.isEnglishDigits.
+     * When true, all numbers across the entire application (calendars, charts, lists, cards, dialogs, inputs)
+     * are rendered in English digits (0-9). When false, they are rendered in Persian digits (۰-۹).
      */
     @Volatile
     var globalUseEnglishDigits: Boolean = false
 
-    fun toPersianDigits(text: String): String {
-        if (globalUseEnglishDigits) {
-            return toEnglishDigits(text)
-        }
-        val sb = StringBuilder(text.length)
-        for (ch in text) {
-            when (ch) {
-                in '0'..'9' -> sb.append(persianDigits[ch - '0'])
-                in '٠'..'٩' -> sb.append(persianDigits[ch - '٠'])
-                else -> sb.append(ch)
+    /**
+     * Central number & amount formatting function (Items 2 & 3).
+     * Separates large numbers 3-by-3 with commas (e.g., 1,250,000 or ۱,۲۵۰,۰۰۰)
+     * and applies the user's selected digit language (English or Persian).
+     */
+    fun formatNumber(
+        number: Number,
+        useCommas: Boolean = true,
+        isEnglishDigits: Boolean = globalUseEnglishDigits
+    ): String {
+        val longVal = number.toLong()
+        val raw = if (useCommas) {
+            val symbols = DecimalFormatSymbols(Locale.US).apply {
+                groupingSeparator = ','
             }
-        }
-        return sb.toString()
-    }
-
-    fun toPersianDigits(number: Number): String {
-        val numValue = number.toLong()
-        val raw = if (kotlin.math.abs(numValue) >= 1000L && numValue !in 1300L..1500L) {
-            val symbols = DecimalFormatSymbols(Locale.US).apply { groupingSeparator = ',' }
-            DecimalFormat("#,###", symbols).format(numValue)
+            DecimalFormat("#,###", symbols).format(longVal)
         } else {
             number.toString()
         }
-        return toPersianDigits(raw)
+        return applyDigitLanguage(raw, isEnglishDigits)
     }
 
-    fun formatDigits(text: String, isEnglishDigits: Boolean = globalUseEnglishDigits): String {
+    fun formatNumber(
+        number: Number,
+        currency: AppCurrency,
+        useCommas: Boolean = true
+    ): String = formatNumber(number, useCommas, currency.isEnglishDigits)
+
+    /**
+     * Formats numeric input text live while typing with 3-by-3 commas and active digit language,
+     * while keeping raw digits clean for database storage.
+     */
+    fun formatInputWithCommas(
+        rawInput: String,
+        isEnglishDigits: Boolean = globalUseEnglishDigits
+    ): String {
+        val clean = toEnglishDigits(rawInput)
+            .replace(",", "")
+            .replace("٬", "")
+            .replace(" ", "")
+            .trim()
+        if (clean.isEmpty()) return ""
+        if (clean == "-") return "-"
+        val parsed = clean.toLongOrNull()
+        return if (parsed != null) {
+            formatNumber(parsed, useCommas = true, isEnglishDigits = isEnglishDigits)
+        } else {
+            applyDigitLanguage(clean, isEnglishDigits)
+        }
+    }
+
+    private fun applyDigitLanguage(text: String, isEnglishDigits: Boolean): String {
         return if (isEnglishDigits) {
             toEnglishDigits(text)
         } else {
@@ -59,16 +86,33 @@ object PersianNumberFormatter {
         }
     }
 
+    fun toPersianDigits(text: String): String {
+        return applyDigitLanguage(text, globalUseEnglishDigits)
+    }
+
+    fun toPersianDigits(number: Number): String {
+        val numValue = number.toLong()
+        // Years (e.g., 1300..1500) stay without commas; all other large numbers >= 1000 get 3-by-3 commas
+        val shouldUseCommas = abs(numValue) >= 1000L && numValue !in 1300L..1500L
+        return formatNumber(numValue, useCommas = shouldUseCommas, isEnglishDigits = globalUseEnglishDigits)
+    }
+
+    fun formatDigits(text: String, isEnglishDigits: Boolean = globalUseEnglishDigits): String {
+        return applyDigitLanguage(text, isEnglishDigits)
+    }
+
     fun formatDigits(number: Number, isEnglishDigits: Boolean = globalUseEnglishDigits): String {
-        return formatDigits(number.toString(), isEnglishDigits)
+        val numValue = number.toLong()
+        val shouldUseCommas = abs(numValue) >= 1000L && numValue !in 1300L..1500L
+        return formatNumber(numValue, useCommas = shouldUseCommas, isEnglishDigits = isEnglishDigits)
     }
 
     fun formatDigits(text: String, currency: AppCurrency): String {
-        return formatDigits(text, currency.isEnglishDigits)
+        return applyDigitLanguage(text, currency.isEnglishDigits)
     }
 
     fun formatDigits(number: Number, currency: AppCurrency): String {
-        return formatDigits(number.toString(), currency.isEnglishDigits)
+        return formatDigits(number, currency.isEnglishDigits)
     }
 
     fun toEnglishDigits(text: String): String {
@@ -86,16 +130,11 @@ object PersianNumberFormatter {
     }
 
     fun formatNumberWithCommas(amount: Long, isEnglishDigits: Boolean = globalUseEnglishDigits): String {
-        val symbols = DecimalFormatSymbols(Locale.US).apply {
-            groupingSeparator = ','
-        }
-        val formatter = DecimalFormat("#,###", symbols)
-        val formatted = formatter.format(amount)
-        return if (isEnglishDigits) toEnglishDigits(formatted) else formatDigits(formatted, false)
+        return formatNumber(amount, useCommas = true, isEnglishDigits = isEnglishDigits)
     }
 
     fun formatNumberWithCommas(amount: Long, currency: AppCurrency): String {
-        return formatNumberWithCommas(amount, currency.isEnglishDigits)
+        return formatNumber(amount, useCommas = true, isEnglishDigits = currency.isEnglishDigits)
     }
 
     fun formatCurrency(
@@ -104,13 +143,21 @@ object PersianNumberFormatter {
         showSign: Boolean = false
     ): String {
         val useEn = currency.isEnglishDigits || globalUseEnglishDigits
-        val formatted = formatNumberWithCommas(kotlin.math.abs(amount), useEn)
+        val formatted = formatNumber(abs(amount), useCommas = true, isEnglishDigits = useEn)
         val sign = when {
             amount < 0 -> "- "
             showSign && amount > 0 -> "+ "
             else -> ""
         }
         return "$sign$formatted ${currency.unitName}"
+    }
+
+    /**
+     * Compact chart axis formatter that still uses 3-by-3 commas and respects digit language.
+     */
+    fun formatChartValue(amount: Long, currency: AppCurrency = AppCurrency.TOMAN): String {
+        val useEn = currency.isEnglishDigits || globalUseEnglishDigits
+        return formatNumber(amount, useCommas = true, isEnglishDigits = useEn)
     }
 
     fun parseAmount(input: String): Long {
@@ -125,14 +172,14 @@ object PersianNumberFormatter {
     fun parseNumericValue(input: String): Long = parseAmount(input)
 
     fun formatWithCommas(amount: Long, isEnglishDigits: Boolean = globalUseEnglishDigits): String =
-        formatNumberWithCommas(amount, isEnglishDigits)
+        formatNumber(amount, useCommas = true, isEnglishDigits = isEnglishDigits)
 
     fun formatWithCommas(amount: Long, currency: AppCurrency): String =
-        formatNumberWithCommas(amount, currency)
+        formatNumber(amount, useCommas = true, isEnglishDigits = currency.isEnglishDigits)
 
     fun formatPercent(value: Int, isEnglishDigits: Boolean = globalUseEnglishDigits): String =
-        "${formatDigits(value, isEnglishDigits)}٪"
+        "${applyDigitLanguage(value.toString(), isEnglishDigits)}٪"
 
     fun formatPercent(value: Float, isEnglishDigits: Boolean = globalUseEnglishDigits): String =
-        "${formatDigits(value.toInt(), isEnglishDigits)}٪"
+        "${applyDigitLanguage(value.toInt().toString(), isEnglishDigits)}٪"
 }

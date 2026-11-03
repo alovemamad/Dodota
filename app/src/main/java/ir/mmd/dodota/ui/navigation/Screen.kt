@@ -28,6 +28,7 @@ sealed class Screen(val route: String) {
     }
 
     object Debts : Screen("debts")
+    object Checks : Screen("checks")
     object DebtDetail : Screen("debt_detail/{debtId}") {
         fun createRoute(debtId: Long): String = "debt_detail/$debtId"
     }
@@ -42,9 +43,9 @@ sealed class Screen(val route: String) {
     object Goals : Screen("goals")
     object Assets : Screen("assets")
     object FinancialCalendar : Screen("financial_calendar")
-    object Recurring : Screen("recurring")
     object Reminders : Screen("reminders")
     object Checklists : Screen("checklists")
+    object Bahesab : Screen("bahesab")
     object BackupRestore : Screen("backup_restore")
     object Trash : Screen("trash")
     object Settings : Screen("settings")

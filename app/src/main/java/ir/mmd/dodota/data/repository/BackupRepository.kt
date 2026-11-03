@@ -20,17 +20,40 @@ class BackupRepository(
         .build()
     private val adapter = moshi.adapter(DodotaBackupPayload::class.java)
 
+    private fun candidateBackupDirs(): List<File> {
+        val dirs = mutableListOf<File>()
+        try {
+            val docsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS)
+            if (docsDir != null) {
+                dirs.add(File(docsDir, "MyFinanceBackup"))
+            }
+        } catch (_: Exception) {}
+        try {
+            val appExtDir = context.getExternalFilesDir(null)
+            if (appExtDir != null) {
+                dirs.add(File(appExtDir, "MyFinanceBackup"))
+            }
+        } catch (_: Exception) {}
+        dirs.add(File(context.filesDir, "MyFinanceBackup"))
+        return dirs
+    }
+
+    private fun isDirWritable(dir: File): Boolean {
+        return try {
+            if (!dir.exists() && !dir.mkdirs()) return false
+            val probe = File(dir, ".write_probe_${System.nanoTime()}")
+            probe.writeText("ok", Charsets.UTF_8)
+            probe.delete()
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private val backupDir: File
         get() {
-            val docsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS)
-            val primaryBackupDir = File(docsDir, "MyFinanceBackup")
-            if (primaryBackupDir.exists() || primaryBackupDir.mkdirs()) {
-                return primaryBackupDir
-            }
-            val appExtDir = context.getExternalFilesDir(null)
-            val secondaryBackupDir = File(appExtDir, "MyFinanceBackup")
-            if (secondaryBackupDir.exists() || secondaryBackupDir.mkdirs()) {
-                return secondaryBackupDir
+            for (dir in candidateBackupDirs()) {
+                if (isDirWritable(dir)) return dir
             }
             return File(context.filesDir, "MyFinanceBackup").apply { if (!exists()) mkdirs() }
         }
@@ -38,13 +61,24 @@ class BackupRepository(
     fun getBackupFolder(): File = backupDir
 
     fun listBackupFiles(): List<File> {
-        return try {
-            backupDir.listFiles { file -> file.isFile && file.extension.equals("json", ignoreCase = true) }
-                ?.sortedByDescending { it.lastModified() }
-                ?: emptyList()
-        } catch (_: Exception) {
-            emptyList()
+        val seenPaths = mutableSetOf<String>()
+        val result = mutableListOf<File>()
+        for (dir in candidateBackupDirs()) {
+            try {
+                if (dir.exists() && dir.isDirectory) {
+                    val files = dir.listFiles { file ->
+                        file.isFile && file.extension.equals("json", ignoreCase = true)
+                    } ?: emptyArray()
+                    for (f in files) {
+                        val key = try { f.canonicalPath } catch (_: Exception) { f.absolutePath }
+                        if (seenPaths.add(key)) {
+                            result.add(f)
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
         }
+        return result.sortedByDescending { it.lastModified() }
     }
 
     suspend fun saveBackupToFile(customFileName: String? = null): File = withContext(Dispatchers.IO) {
@@ -52,9 +86,18 @@ class BackupRepository(
         val sdf = java.text.SimpleDateFormat("yyyy_MM_dd_HH_mm_ss", java.util.Locale.US)
         val timeStamp = sdf.format(java.util.Date())
         val name = customFileName ?: "MyFinance_Backup_$timeStamp.json"
-        val file = File(backupDir, name)
-        file.writeText(json, Charsets.UTF_8)
-        file
+        var lastError: Exception? = null
+        for (dir in candidateBackupDirs()) {
+            try {
+                if (!dir.exists()) dir.mkdirs()
+                val file = File(dir, name)
+                file.writeText(json, Charsets.UTF_8)
+                return@withContext file
+            } catch (e: Exception) {
+                lastError = e
+            }
+        }
+        throw (lastError ?: java.io.IOException("خطا در ذخیره‌سازی فایل پشتیبان"))
     }
 
     suspend fun deleteBackupFile(file: File): Boolean = withContext(Dispatchers.IO) {

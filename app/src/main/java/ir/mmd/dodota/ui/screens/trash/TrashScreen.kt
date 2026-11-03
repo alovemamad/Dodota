@@ -44,6 +44,7 @@ fun TrashScreen(
     var showEmptyTrashConfirm by remember { mutableStateOf(false) }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
                 title = "سطل زباله و بازیابی",
@@ -68,7 +69,7 @@ fun TrashScreen(
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 40.dp),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 56.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (trashList.isEmpty()) {
@@ -84,6 +85,7 @@ fun TrashScreen(
                     val cat = tx.categoryId?.let { categoryMap[it] }
                     Card(
                         shape = RoundedCornerShape(16.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         modifier = Modifier.fillMaxWidth()
                     ) {

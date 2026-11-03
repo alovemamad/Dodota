@@ -67,6 +67,7 @@ fun SettingsScreen(
     val fontSizePresetTitle = AppFontSizePreset.fromScale(userPreferences.fontScale).title
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
                 title = "تنظیمات و شخصی‌سازی",
@@ -83,60 +84,6 @@ fun SettingsScreen(
             contentPadding = PaddingValues(top = 16.dp, bottom = 110.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Visual Customization Hero Banner
-            item {
-                GlassCard(
-                    shape = RoundedCornerShape(24.dp),
-                    isHighlighted = true,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.04f)
-                                    )
-                                )
-                            )
-                            .padding(18.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(52.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
-                                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), RoundedCornerShape(16.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(26.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "استودیو شخصی‌سازی ظاهر دودوتا",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "تم: ${userPreferences.themeMode.title} • فونت: ${userPreferences.fontFamily.title} (${PersianNumberFormatter.toPersianDigits(fontPercent)}٪)",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                        }
-                    }
-                }
-            }
-
             // General & Appearance Settings Section
             item {
                 Text(
@@ -150,8 +97,8 @@ fun SettingsScreen(
             item {
                 SettingsItemCard(
                     icon = Icons.Outlined.Palette,
-                    title = "تم و استایل گرافیکی برنامه",
-                    subtitle = "${userPreferences.themeMode.title} • ${userPreferences.themeMode.subtitle}",
+                    title = "تم برنامه",
+                    subtitle = userPreferences.themeMode.title,
                     onClick = { showThemeModeDialog = true },
                     testTag = "settings_theme_card"
                 )
@@ -160,8 +107,8 @@ fun SettingsScreen(
             item {
                 SettingsItemCard(
                     icon = Icons.Outlined.FontDownload,
-                    title = "فونت فارسی و اندازه نوشته‌ها",
-                    subtitle = "فونت ${userPreferences.fontFamily.title} • اندازه $fontSizePresetTitle (${PersianNumberFormatter.toPersianDigits(fontPercent)}٪)",
+                    title = "فونت و اندازه نوشته",
+                    subtitle = "${userPreferences.fontFamily.title} (${PersianNumberFormatter.formatDigits(fontPercent, userPreferences.currency)}٪)",
                     onClick = { showTypographyDialog = true },
                     testTag = "settings_typography_card"
                 )
@@ -170,7 +117,7 @@ fun SettingsScreen(
             item {
                 SettingsItemCard(
                     icon = Icons.Outlined.Payments,
-                    title = "واحد پول و فرمت نمایش ارقام",
+                    title = "واحد پول",
                     subtitle = userPreferences.currency.title,
                     onClick = { showCurrencyDialog = true },
                     testTag = "settings_currency_card"
@@ -192,7 +139,7 @@ fun SettingsScreen(
                 SettingsItemCard(
                     icon = Icons.Outlined.Lock,
                     title = "رمز عبور و اثر انگشت",
-                    subtitle = if (userPreferences.isPinEnabled) "قفل با پین فعال است" else "غیرفعال",
+                    subtitle = if (userPreferences.isPinEnabled) "فعال" else "غیرفعال",
                     onClick = onNavigateToSecurity,
                     testTag = "settings_security_card"
                 )
@@ -212,8 +159,8 @@ fun SettingsScreen(
             item {
                 SettingsItemCard(
                     icon = Icons.Outlined.Backup,
-                    title = "پشتیبان‌گیری و بازیابی داده‌ها",
-                    subtitle = "خروجی JSON آفلاین و پشتیبان هفتگی",
+                    title = "پشتیبان‌گیری و بازیابی",
+                    subtitle = "",
                     onClick = onNavigateToBackup,
                     testTag = "settings_backup_card"
                 )
@@ -223,7 +170,7 @@ fun SettingsScreen(
                 SettingsItemCard(
                     icon = Icons.Outlined.Delete,
                     title = "سطل زباله",
-                    subtitle = "مشاهده و بازیابی تراکنش‌های حذف شده",
+                    subtitle = "",
                     onClick = onNavigateToTrash,
                     testTag = "settings_trash_card"
                 )
@@ -255,8 +202,8 @@ fun SettingsScreen(
             item {
                 SettingsItemCard(
                     icon = Icons.Outlined.Info,
-                    title = "درباره «دودوتا» و توسعه‌دهنده",
-                    subtitle = "نسخه ۱.۰.۰ • توسعه‌دهنده: Mmd",
+                    title = "درباره «دودوتا»",
+                    subtitle = PersianNumberFormatter.formatDigits("نسخه 1.0.0", userPreferences.currency),
                     onClick = onNavigateToAbout,
                     testTag = "settings_about_card"
                 )
@@ -448,10 +395,12 @@ private fun TypographyCustomizationDialog(
     ) {
         GlassCard(
             shape = RoundedCornerShape(28.dp),
+            elevation = 10.dp,
             isHighlighted = true,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 24.dp)
+                .navigationBarsPadding()
         ) {
             Column(
                 modifier = Modifier
@@ -536,7 +485,7 @@ private fun TypographyCustomizationDialog(
                                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
                             ) {
                                 Text(
-                                    text = "${currentFont.title} • ${PersianNumberFormatter.toPersianDigits(currentPercent)}٪",
+                                    text = "${currentFont.title} • ${PersianNumberFormatter.formatDigits(currentPercent, userPreferences.currency)}٪",
                                     fontFamily = previewFontFamily,
                                     fontSize = (11f * currentScale).sp,
                                     fontWeight = FontWeight.Bold,
@@ -561,7 +510,7 @@ private fun TypographyCustomizationDialog(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "حساب بلو بانک • ۲۵ مهر ۱۴۰۴",
+                                    text = PersianNumberFormatter.formatDigits("حساب بلو بانک • 25 مهر 1404", userPreferences.currency),
                                     fontFamily = previewFontFamily,
                                     fontSize = (12f * currentScale).sp,
                                     color = MaterialTheme.colorScheme.outline
@@ -611,7 +560,7 @@ private fun TypographyCustomizationDialog(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Text(
-                                        text = "${PersianNumberFormatter.toPersianDigits(currentPercent)}٪",
+                                        text = "${PersianNumberFormatter.formatDigits(currentPercent, userPreferences.currency)}٪",
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = MaterialTheme.colorScheme.primary
@@ -696,7 +645,7 @@ private fun TypographyCustomizationDialog(
 
                     // 2. Font Family List Section
                     Text(
-                        text = "انتخاب فونت فارسی (۸ فونت استاندارد و آفلاین)",
+                        text = PersianNumberFormatter.formatDigits("انتخاب فونت فارسی (8 فونت استاندارد و آفلاین)", userPreferences.currency),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.primary
@@ -781,7 +730,7 @@ private fun TypographyCustomizationDialog(
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "نمونه ارقام: ۱۲,۴۵۰,۰۰۰ تومان • مدیریت هوشمند مالی",
+                                        text = "نمونه ارقام: ${PersianNumberFormatter.formatCurrency(12450000L, userPreferences.currency)} • مدیریت هوشمند مالی",
                                         fontFamily = optionFontFamily,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold,

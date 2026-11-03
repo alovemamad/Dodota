@@ -34,9 +34,11 @@ import ir.mmd.dodota.data.model.DebtPaymentEntity
 import ir.mmd.dodota.data.model.DebtType
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
+import ir.mmd.dodota.ui.components.DodotaTextField
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.EmptyStateCard
 import ir.mmd.dodota.ui.components.GlassCard
+import ir.mmd.dodota.ui.components.GraphicalFormDialog
 import ir.mmd.dodota.ui.components.PersianAmountInput
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
@@ -66,9 +68,10 @@ fun DebtDetailScreen(
     val context = LocalContext.current
 
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
-                title = debt?.personOrCompanyName ?: "جزئیات و چشم‌انداز تسویه",
+                title = debt?.personOrCompanyName ?: "جزئیات تسویه",
                 onBackClick = onBack
             )
         },
@@ -78,7 +81,8 @@ fun DebtDetailScreen(
                     onClick = { showPaymentDialog = true },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
-                    shape = RoundedCornerShape(18.dp)
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.navigationBarsPadding()
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "ثبت پرداخت/دریافت")
                 }
@@ -139,8 +143,8 @@ fun DebtDetailScreen(
                                 .background(
                                     Brush.verticalGradient(
                                         colors = listOf(
-                                            Color(0xFF1E1420),
-                                            Color(0xFF12121A)
+                                            accentColor.copy(alpha = 0.15f),
+                                            MaterialTheme.colorScheme.surfaceContainer
                                         )
                                     )
                                 )
@@ -188,7 +192,7 @@ fun DebtDetailScreen(
                                     }
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text(
-                                            text = "${PersianNumberFormatter.toPersianDigits(percentPaid)}٪",
+                                            text = "${PersianNumberFormatter.formatDigits(percentPaid, userPreferences.currency)}٪",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = if (percentPaid >= 100) IncomeGreen else accentColor
@@ -196,7 +200,7 @@ fun DebtDetailScreen(
                                         Text(
                                             text = "تسویه‌شده",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = Color.White.copy(alpha = 0.7f)
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
@@ -207,7 +211,11 @@ fun DebtDetailScreen(
                                         color = accentColor.copy(alpha = 0.2f)
                                     ) {
                                         Text(
-                                            text = if (isCheck) "چک صیادی / بانکی" else d.type.title,
+                                            text = when {
+                                                isCheck -> "چک صیادی / بانکی"
+                                                isOwe -> "بدهی"
+                                                else -> "طلب"
+                                            },
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = accentColor,
@@ -219,12 +227,12 @@ fun DebtDetailScreen(
                                         text = d.personOrCompanyName,
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = Color.White
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
                                         text = "مبلغ کل: ${PersianNumberFormatter.formatCurrency(d.totalAmount, userPreferences.currency)}",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = Color.White.copy(alpha = 0.75f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -297,7 +305,7 @@ fun DebtDetailScreen(
                                             text = PersianNumberFormatter.formatCurrency(remaining, userPreferences.currency),
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = Color.White,
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -314,7 +322,7 @@ fun DebtDetailScreen(
                                     .height(8.dp)
                                     .clip(RoundedCornerShape(4.dp)),
                                 color = if (percentPaid >= 100) IncomeGreen else accentColor,
-                                trackColor = Color.White.copy(alpha = 0.12f)
+                                trackColor = MaterialTheme.colorScheme.surface
                             )
                         }
                     }
@@ -322,7 +330,7 @@ fun DebtDetailScreen(
 
                 item {
                     Text(
-                        text = "تاریخچه پرداخت‌ها / تسویه‌ها",
+                        text = if (isOwe) "تاریخچه پرداخت‌ها" else "تاریخچه دریافت‌ها",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -331,8 +339,8 @@ fun DebtDetailScreen(
                 if (payments.isEmpty()) {
                     item {
                         EmptyStateCard(
-                            title = "پرداختی ثبت نشده است",
-                            description = "برای ثبت پرداخت یا تسویه جزئی از دکمه + پایین صفحه استفاده کنید."
+                            title = if (isOwe) "پرداختی ثبت نشده است" else "دریافتی ثبت نشده است",
+                            description = ""
                         )
                     }
                 } else {
@@ -390,60 +398,53 @@ fun DebtDetailScreen(
     }
 
     if (showPaymentDialog && debt != null) {
+        val d = debt!!
+        val isOwe = d.type == DebtType.DEBT_I_OWE
+        val isCheck = d.isCheck || d.personOrCompanyName.contains("چک") || d.notes.contains("چک")
         var paymentAmountText by remember { mutableStateOf("") }
         var paymentNote by remember { mutableStateOf("") }
         var selectedAccId by remember { mutableStateOf<Long?>(accounts.firstOrNull()?.id) }
 
-        AlertDialog(
+        GraphicalFormDialog(
             onDismissRequest = { showPaymentDialog = false },
-            title = { Text(if (debt!!.type == DebtType.DEBT_I_OWE) "ثبت پرداخت بدهی / چک" else "ثبت دریافت طلب") },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    PersianAmountInput(
-                        value = paymentAmountText,
-                        onValueChange = { paymentAmountText = it },
-                        currency = userPreferences.currency,
-                        label = "مبلغ پرداختی"
-                    )
-                    OutlinedTextField(
-                        value = paymentNote,
-                        onValueChange = { paymentNote = it },
-                        label = { Text("توضیحات (اختیاری)") },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+            title = when {
+                isCheck -> "ثبت پاس شدن چک"
+                isOwe -> "ثبت پرداخت بدهی"
+                else -> "ثبت دریافت طلب"
             },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val amount = PersianNumberFormatter.parseAmount(paymentAmountText)
-                        if (amount > 0) {
-                            coroutineScope.launch {
-                                repository.recordDebtPayment(
-                                    debt = debt!!,
-                                    amount = amount,
-                                    accountId = selectedAccId,
-                                    notes = paymentNote
-                                )
-                                Toast.makeText(context, "پرداخت با موفقیت ثبت شد", Toast.LENGTH_SHORT).show()
-                                showPaymentDialog = false
-                            }
-                        }
+            icon = Icons.Default.Payments,
+            accentColor = IncomeGreen,
+            confirmText = if (isOwe) "ثبت پرداخت" else "ثبت دریافت",
+            onConfirm = {
+                val amount = PersianNumberFormatter.parseAmount(paymentAmountText)
+                if (amount > 0) {
+                    coroutineScope.launch {
+                        repository.recordDebtPayment(
+                            debt = d,
+                            amount = amount,
+                            accountId = selectedAccId,
+                            notes = paymentNote
+                        )
+                        Toast.makeText(context, if (isOwe) "پرداخت با موفقیت ثبت شد" else "دریافت با موفقیت ثبت شد", Toast.LENGTH_SHORT).show()
+                        showPaymentDialog = false
                     }
-                ) {
-                    Text("ثبت پرداخت")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPaymentDialog = false }) {
-                    Text("انصراف")
                 }
             }
-        )
+        ) {
+            PersianAmountInput(
+                value = paymentAmountText,
+                onValueChange = { paymentAmountText = it },
+                currency = userPreferences.currency,
+                label = if (isOwe) "مبلغ پرداخت‌شده" else "مبلغ دریافت‌شده"
+            )
+            DodotaTextField(
+                value = paymentNote,
+                onValueChange = { paymentNote = it },
+                label = "توضیحات",
+                leadingIcon = Icons.Default.Notes,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 
     paymentToDelete?.let { payment ->

@@ -1,27 +1,30 @@
 package ir.mmd.dodota.ui.screens.installments
 
 import android.widget.Toast
+import androidx.compose.animation.*
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.HourglassBottom
-import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.CreditScore
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import ir.mmd.dodota.data.model.AccountEntity
 import ir.mmd.dodota.data.model.InstallmentPlanEntity
 import ir.mmd.dodota.data.model.ReminderTargetType
@@ -67,8 +71,88 @@ fun InstallmentsScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var planToEdit by remember { mutableStateOf<InstallmentPlanEntity?>(null) }
     var planToDelete by remember { mutableStateOf<InstallmentPlanEntity?>(null) }
+    var selectedTab by remember { mutableStateOf(0) } // 0: اقساط جاری, 1: بایگانی
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    val allInstallmentsFlow = remember { repository.allInstallments }
+    val allInstallments by allInstallmentsFlow.collectAsState(initial = emptyList())
+
+    val currentPersianDate = remember { PersianDateHelper.getCurrentPersianDate() }
+    var selectedYear by remember { mutableIntStateOf(currentPersianDate.year) }
+    var selectedMonth by remember { mutableIntStateOf(currentPersianDate.month) }
+
+    val isCurrentMonthSelected = selectedYear == currentPersianDate.year && selectedMonth == currentPersianDate.month
+    val selectedMonthName = remember(selectedMonth) { PersianDateHelper.getMonthName(selectedMonth) }
+
+    val startOfMonthMillis = remember(selectedYear, selectedMonth) {
+        PersianDateHelper.getStartOfMonthMillis(selectedYear, selectedMonth)
+    }
+    val endOfMonthMillis = remember(selectedYear, selectedMonth) {
+        PersianDateHelper.getEndOfMonthMillis(selectedYear, selectedMonth)
+    }
+
+    val selectedMonthInstallments = remember(allInstallments, plans, startOfMonthMillis, endOfMonthMillis) {
+        val activePlanIds = plans.map { it.id }.toSet()
+        allInstallments.filter { it.planId in activePlanIds && it.dueDateMillis in startOfMonthMillis..endOfMonthMillis }
+    }
+
+    // Fallback monthly installment calculation directly from active plans if individual installments aren't yet loaded
+    val fallbackMonthlyAmount = remember(plans, selectedYear, selectedMonth) {
+        plans.filter { !it.isCompleted }.filter { plan ->
+            val startP = PersianDateHelper.fromMillis(plan.startDateMillis)
+            val monthDiff = (selectedYear - startP.year) * 12 + (selectedMonth - startP.month)
+            monthDiff in 0 until plan.numberOfInstallments
+        }.sumOf { it.installmentAmount }
+    }
+
+    val selectedMonthTotalAmount = if (selectedMonthInstallments.isNotEmpty()) {
+        selectedMonthInstallments.sumOf { it.amount }
+    } else {
+        fallbackMonthlyAmount
+    }
+
+    val selectedMonthPaidAmount = selectedMonthInstallments.filter { it.isPaid }.sumOf { it.amount }
+    val selectedMonthRemainingAmount = (selectedMonthTotalAmount - selectedMonthPaidAmount).coerceAtLeast(0L)
+    val selectedMonthTotalCount = if (selectedMonthInstallments.isNotEmpty()) {
+        selectedMonthInstallments.size
+    } else {
+        plans.count { !it.isCompleted && run {
+            val startP = PersianDateHelper.fromMillis(it.startDateMillis)
+            val diff = (selectedYear - startP.year) * 12 + (selectedMonth - startP.month)
+            diff in 0 until it.numberOfInstallments
+        }}
+    }
+    val overdueCount = remember(selectedMonthInstallments) {
+        val now = System.currentTimeMillis()
+        selectedMonthInstallments.count { !it.isPaid && it.dueDateMillis < now }
+    }
+
+    // Counts of installments per month for the selectedYear to show small badges on the month chips
+    val monthInstallmentCounts = remember(allInstallments, plans, selectedYear) {
+        val activePlanIds = plans.map { it.id }.toSet()
+        val counts = IntArray(13)
+        allInstallments.forEach { inst ->
+            if (inst.planId in activePlanIds) {
+                val p = PersianDateHelper.fromMillis(inst.dueDateMillis)
+                if (p.year == selectedYear && p.month in 1..12) {
+                    counts[p.month]++
+                }
+            }
+        }
+        if (counts.all { it == 0 }) {
+            plans.filter { !it.isCompleted }.forEach { plan ->
+                val startP = PersianDateHelper.fromMillis(plan.startDateMillis)
+                for (m in 1..12) {
+                    val diff = (selectedYear - startP.year) * 12 + (m - startP.month)
+                    if (diff in 0 until plan.numberOfInstallments) {
+                        counts[m]++
+                    }
+                }
+            }
+        }
+        counts
+    }
 
     val totalAllPlansAmount = plans.sumOf { it.numberOfInstallments * it.installmentAmount }
     val totalPaidSoFarAmount = plans.sumOf { it.paidInstallments.coerceAtMost(it.numberOfInstallments) * it.installmentAmount }
@@ -76,18 +160,30 @@ fun InstallmentsScreen(
     val overallProgress = if (totalAllPlansAmount > 0L) (totalPaidSoFarAmount.toFloat() / totalAllPlansAmount.toFloat()).coerceIn(0f, 1f) else 0f
     val overallPercent = (overallProgress * 100).toInt()
 
+    val activePlans = remember(plans) {
+        plans.filter { !it.isCompleted && it.paidInstallments < it.numberOfInstallments }
+    }
+    val archivedPlans = remember(plans) {
+        plans.filter { it.isCompleted || it.paidInstallments >= it.numberOfInstallments }
+    }
+    val displayedPlans = if (selectedTab == 0) activePlans else archivedPlans
+
+    val accentColor = MaterialTheme.colorScheme.primary
+    val accentLight = MaterialTheme.colorScheme.secondary
+
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
-                title = "چشم‌انداز و مدیریت اقساط",
+                title = "اقساط",
                 onBackClick = onBack
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showAddDialog = true },
-                containerColor = InstallmentScreenPurple,
-                contentColor = Color.White,
+                containerColor = accentColor,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = RoundedCornerShape(18.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "افزودن وام/قسط")
@@ -103,20 +199,18 @@ fun InstallmentsScreen(
             contentPadding = PaddingValues(top = 16.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Iconic Financial Outlook Summary Card
+            // Unified Graphical Hero & Status Card (ترکیب مجموع کل اقساط و وضعیت در یک بخش مرتب، جمع‌وجور و گرافیکی)
             item {
                 val animOverall by animateFloatAsState(
                     targetValue = overallProgress,
                     animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing),
                     label = "inst_overall"
                 )
-                Surface(
-                    shape = RoundedCornerShape(26.dp),
-                    color = Color.Transparent,
-                    border = BorderStroke(
-                        1.5.dp,
-                        Brush.linearGradient(colors = listOf(InstallmentScreenPurple, IncomeGreen.copy(alpha = 0.7f)))
-                    ),
+
+                GlassCard(
+                    shape = RoundedCornerShape(24.dp),
+                    borderColor = accentColor.copy(alpha = 0.5f),
+                    isHighlighted = true,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -124,31 +218,299 @@ fun InstallmentsScreen(
                             .fillMaxWidth()
                             .background(
                                 Brush.verticalGradient(
-                                    colors = listOf(Color(0xFF211332), Color(0xFF14121D))
+                                    colors = listOf(
+                                        accentColor.copy(alpha = 0.16f),
+                                        accentLight.copy(alpha = 0.05f),
+                                        MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
+                                    )
                                 )
                             )
-                            .padding(18.dp)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        // بخش بالایی: اطلاعات اقساط ماه انتخابی همراه با کلید کشویی کوچک انتخاب ماه، در کنار چارت دایره‌ای
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CalendarMonth,
+                                        contentDescription = null,
+                                        tint = accentColor,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = "مجموع اقساط",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+
+                                    // کلید کشویی کوچک و شیک انتخاب ماه (Dropdown)
+                                    var isMonthDropdownOpen by remember { mutableStateOf(false) }
+                                    Box {
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = accentColor.copy(alpha = 0.12f),
+                                            border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
+                                            modifier = Modifier.clickable { isMonthDropdownOpen = true }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                            ) {
+                                                Text(
+                                                    text = "$selectedMonthName ${PersianNumberFormatter.formatDigits(selectedYear)}",
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = accentColor
+                                                )
+                                                Icon(
+                                                    imageVector = Icons.Default.ArrowDropDown,
+                                                    contentDescription = "انتخاب ماه",
+                                                    tint = accentColor,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+
+                                        DropdownMenu(
+                                            expanded = isMonthDropdownOpen,
+                                            onDismissRequest = { isMonthDropdownOpen = false },
+                                            modifier = Modifier
+                                                .background(MaterialTheme.colorScheme.surface)
+                                                .heightIn(max = 350.dp)
+                                        ) {
+                                            // دکمه پرش به ماه جاری در صورت انتخاب ماه دیگر
+                                            if (!isCurrentMonthSelected) {
+                                                DropdownMenuItem(
+                                                    text = {
+                                                        Text(
+                                                            text = "بازگشت به ماه جاری (${PersianDateHelper.getMonthName(currentPersianDate.month)})",
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = accentColor
+                                                        )
+                                                    },
+                                                    leadingIcon = {
+                                                        Icon(
+                                                            Icons.Default.Today,
+                                                            contentDescription = null,
+                                                            tint = accentColor,
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    },
+                                                    onClick = {
+                                                        selectedYear = currentPersianDate.year
+                                                        selectedMonth = currentPersianDate.month
+                                                        isMonthDropdownOpen = false
+                                                    }
+                                                )
+                                                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+                                            }
+
+                                            // فهرست ماه‌های سال شمسی
+                                            PersianDateHelper.PERSIAN_MONTHS.forEachIndexed { index, mName ->
+                                                val mNum = index + 1
+                                                val isSelected = mNum == selectedMonth
+                                                val isTodayMonth = (mNum == currentPersianDate.month && selectedYear == currentPersianDate.year)
+                                                val countInM = monthInstallmentCounts.getOrElse(mNum) { 0 }
+
+                                                DropdownMenuItem(
+                                                    text = {
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Text(
+                                                                text = mName,
+                                                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                                                color = if (isSelected) accentColor else MaterialTheme.colorScheme.onSurface
+                                                            )
+                                                            Row(
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                            ) {
+                                                                if (isTodayMonth) {
+                                                                    Surface(
+                                                                        shape = RoundedCornerShape(4.dp),
+                                                                        color = accentColor.copy(alpha = 0.12f)
+                                                                    ) {
+                                                                        Text(
+                                                                            text = "ماه جاری",
+                                                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                                                            color = accentColor,
+                                                                            fontWeight = FontWeight.Bold,
+                                                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                                        )
+                                                                    }
+                                                                }
+                                                                if (countInM > 0) {
+                                                                    Surface(
+                                                                        shape = RoundedCornerShape(4.dp),
+                                                                        color = if (isSelected) accentColor else MaterialTheme.colorScheme.surfaceVariant
+                                                                    ) {
+                                                                        Text(
+                                                                            text = "${PersianNumberFormatter.formatDigits(countInM)} قسط",
+                                                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                                                            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                            fontWeight = FontWeight.Bold,
+                                                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                                        )
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    leadingIcon = if (isSelected) {
+                                                        {
+                                                            Icon(
+                                                                Icons.Default.Check,
+                                                                contentDescription = null,
+                                                                tint = accentColor,
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                        }
+                                                    } else null,
+                                                    onClick = {
+                                                        selectedMonth = mNum
+                                                        isMonthDropdownOpen = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                AnimatedContent(
+                                    targetState = selectedMonthTotalAmount,
+                                    label = "month_amount_anim"
+                                ) { totalAmt ->
+                                    Text(
+                                        text = PersianNumberFormatter.formatCurrency(totalAmt, userPreferences.currency),
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(3.dp))
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = IncomeGreen,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    AnimatedContent(
+                                        targetState = selectedMonthPaidAmount,
+                                        label = "month_paid_anim"
+                                    ) { paidAmt ->
+                                        Text(
+                                            text = "${PersianNumberFormatter.formatCurrency(paidAmt, userPreferences.currency)} پرداخت شده",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = IncomeGreen
+                                        )
+                                    }
+                                    if (selectedMonthRemainingAmount > 0L) {
+                                        AnimatedContent(
+                                            targetState = selectedMonthRemainingAmount,
+                                            label = "month_remaining_anim"
+                                        ) { remAmt ->
+                                            Text(
+                                                text = "(${PersianNumberFormatter.formatCurrency(remAmt, userPreferences.currency)} مانده)",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = accentColor.copy(alpha = 0.12f),
+                                        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.3f))
+                                    ) {
+                                        Text(
+                                            text = if (isCurrentMonthSelected) {
+                                                "${PersianNumberFormatter.formatDigits(selectedMonthTotalCount)} قسط این ماه"
+                                            } else {
+                                                "${PersianNumberFormatter.formatDigits(selectedMonthTotalCount)} قسط در این ماه"
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = accentColor,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+
+                                    if (overdueCount > 0) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = ExpenseRed.copy(alpha = 0.12f),
+                                            border = BorderStroke(1.dp, ExpenseRed.copy(alpha = 0.4f))
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.ErrorOutline,
+                                                    contentDescription = null,
+                                                    tint = ExpenseRed,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Text(
+                                                    text = "${PersianNumberFormatter.formatDigits(overdueCount)} معوقه",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = ExpenseRed
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            // چارت دایره‌ای گرافیکی تسویه کل وام‌ها
                             Box(
-                                modifier = Modifier.size(84.dp),
+                                modifier = Modifier.size(72.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Canvas(modifier = Modifier.fillMaxSize()) {
-                                    val strokePx = 8.dp.toPx()
-                                    val inset = strokePx / 2f + 2f
+                                    val strokePx = 6.dp.toPx()
+                                    val inset = strokePx / 2f + 1f
                                     val arcSize = Size(size.width - inset * 2, size.height - inset * 2)
 
                                     drawCircle(
-                                        color = InstallmentScreenPurple.copy(alpha = 0.1f),
+                                        color = accentColor.copy(alpha = 0.12f),
                                         radius = (size.minDimension / 2f) - strokePx
                                     )
                                     drawArc(
-                                        color = InstallmentScreenPurple.copy(alpha = 0.2f),
+                                        color = accentColor.copy(alpha = 0.2f),
                                         startAngle = -90f,
                                         sweepAngle = 360f,
                                         useCenter = false,
@@ -159,7 +521,7 @@ fun InstallmentsScreen(
                                     if (animOverall > 0.01f) {
                                         drawArc(
                                             brush = Brush.linearGradient(
-                                                colors = listOf(InstallmentScreenPurple, InstallmentScreenPurpleLight, IncomeGreen)
+                                                colors = listOf(accentColor, accentLight, IncomeGreen)
                                             ),
                                             startAngle = -90f,
                                             sweepAngle = animOverall * 360f,
@@ -172,73 +534,116 @@ fun InstallmentsScreen(
                                 }
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(
-                                        text = "${PersianNumberFormatter.toPersianDigits(overallPercent)}٪",
+                                        text = "${PersianNumberFormatter.formatDigits(overallPercent)}٪",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = if (overallPercent >= 100 && totalAllPlansAmount > 0) IncomeGreen else InstallmentScreenPurpleLight
+                                        color = if (overallPercent >= 100 && totalAllPlansAmount > 0) IncomeGreen else accentColor
                                     )
                                     Text(
-                                        text = "پرداخت‌شده",
+                                        text = "تسویه کل",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = Color.White.copy(alpha = 0.7f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
+                        }
 
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                        // خط جداکننده نرم
+                        HorizontalDivider(
+                            color = accentColor.copy(alpha = 0.18f),
+                            thickness = 1.dp
+                        )
+
+                        // بخش پایینی: دو باکس متقارن و متناسب برای پرداخت شده و مانده کل
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = IncomeGreen.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, IncomeGreen.copy(alpha = 0.35f)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
                             ) {
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = IncomeGreen.copy(alpha = 0.14f),
-                                    border = BorderStroke(1.dp, IncomeGreen.copy(alpha = 0.45f)),
-                                    modifier = Modifier.fillMaxWidth()
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
+                                        Icon(
+                                            Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = IncomeGreen,
+                                            modifier = Modifier.size(13.dp)
+                                        )
                                         Text(
-                                            text = "تا الان پرداخت شده:",
+                                            text = "پرداخت شده",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = IncomeGreen,
                                             fontWeight = FontWeight.Bold
                                         )
-                                        Text(
-                                            text = PersianNumberFormatter.formatCurrency(totalPaidSoFarAmount, userPreferences.currency),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = IncomeGreen
-                                        )
                                     }
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(
+                                        text = PersianNumberFormatter.formatCurrency(totalPaidSoFarAmount, userPreferences.currency),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = IncomeGreen,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
+                            }
 
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = InstallmentScreenPurple.copy(alpha = 0.14f),
-                                    border = BorderStroke(1.dp, InstallmentScreenPurple.copy(alpha = 0.45f)),
-                                    modifier = Modifier.fillMaxWidth()
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = accentColor.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
+                                        Icon(
+                                            Icons.Default.HourglassBottom,
+                                            contentDescription = null,
+                                            tint = accentColor,
+                                            modifier = Modifier.size(13.dp)
+                                        )
                                         Text(
-                                            text = "مانده کل اقساط:",
+                                            text = "مانده کل اقساط",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = InstallmentScreenPurpleLight,
+                                            color = accentColor,
                                             fontWeight = FontWeight.Bold
                                         )
-                                        Text(
-                                            text = PersianNumberFormatter.formatCurrency(totalRemainingAmount, userPreferences.currency),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = Color.White
-                                        )
                                     }
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(
+                                        text = PersianNumberFormatter.formatCurrency(totalRemainingAmount, userPreferences.currency),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
                             }
                         }
@@ -246,16 +651,116 @@ fun InstallmentsScreen(
                 }
             }
 
-            if (plans.isEmpty()) {
+            // Top Tab Selector: اقساط جاری vs بایگانی
+            item {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val activeTab0Bg by animateColorAsState(
+                            targetValue = if (selectedTab == 0) accentColor else Color.Transparent,
+                            animationSpec = tween(durationMillis = 200),
+                            label = "tab0_bg"
+                        )
+                        val activeTab0Fg by animateColorAsState(
+                            targetValue = if (selectedTab == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            animationSpec = tween(durationMillis = 200),
+                            label = "tab0_fg"
+                        )
+                        val activeTab1Bg by animateColorAsState(
+                            targetValue = if (selectedTab == 1) accentColor else Color.Transparent,
+                            animationSpec = tween(durationMillis = 200),
+                            label = "tab1_bg"
+                        )
+                        val activeTab1Fg by animateColorAsState(
+                            targetValue = if (selectedTab == 1) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            animationSpec = tween(durationMillis = 200),
+                            label = "tab1_fg"
+                        )
+
+                        // Tab 0: Active Installments
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = activeTab0Bg,
+                            contentColor = activeTab0Fg,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { selectedTab = 0 }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 10.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.ReceiptLong,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "اقساط جاری (${PersianNumberFormatter.formatDigits(activePlans.size)})",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (selectedTab == 0) FontWeight.ExtraBold else FontWeight.Medium
+                                )
+                            }
+                        }
+
+                        // Tab 1: Archive (Completed Installments)
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = activeTab1Bg,
+                            contentColor = activeTab1Fg,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { selectedTab = 1 }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 10.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Archive,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "بایگانی (${PersianNumberFormatter.formatDigits(archivedPlans.size)})",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (selectedTab == 1) FontWeight.ExtraBold else FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (displayedPlans.isEmpty()) {
                 item {
                     EmptyStateCard(
-                        title = "هیچ برنامه قسطی ثبت نشده است",
-                        description = "برای ثبت اقساط وام یا خریدهای قسطی خود (با امکان تعیین تاریخ شروع و اقساط پرداخت‌شده قبلی) روی + کلیک کنید.",
-                        icon = Icons.Outlined.CreditScore
+                        title = if (selectedTab == 0) "قسط جاری فعالی وجود ندارد" else "هنوز قسط تکمیل‌شده‌ای در بایگانی وجود ندارد",
+                        description = if (selectedTab == 0) "با زدن دکمه + می‌توانید وام یا قسط جدید تعریف کنید" else "اقساطی که تمام پرداخت‌های آن‌ها تکمیل شود، به صورت خودکار به بخش بایگانی منتقل می‌شوند.",
+                        icon = if (selectedTab == 0) Icons.Outlined.CreditScore else Icons.Default.Archive
                     )
                 }
             } else {
-                items(plans, key = { it.id }) { plan ->
+                items(displayedPlans, key = { it.id }) { plan ->
+                    val now = System.currentTimeMillis()
+                    val planOverdueCount = allInstallments.count { it.planId == plan.id && !it.isPaid && it.dueDateMillis < now }
+                    val hasOverdue = planOverdueCount > 0
+
                     val progress = if (plan.numberOfInstallments > 0) plan.paidInstallments.toFloat() / plan.numberOfInstallments.toFloat() else 0f
                     val percentPaid = (progress * 100).toInt()
                     val paidSoFar = plan.paidInstallments.coerceAtMost(plan.numberOfInstallments) * plan.installmentAmount
@@ -269,40 +774,132 @@ fun InstallmentsScreen(
 
                     GlassCard(
                         shape = RoundedCornerShape(24.dp),
-                        borderColor = InstallmentScreenPurple.copy(alpha = 0.65f),
+                        borderColor = when {
+                            hasOverdue -> ExpenseRed.copy(alpha = 0.85f)
+                            plan.isCompleted -> IncomeGreen.copy(alpha = 0.55f)
+                            else -> accentColor.copy(alpha = 0.55f)
+                        },
                         isHighlighted = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateItem(),
                         onClick = { onNavigateToDetail(plan.id) }
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
+                            // Overdue warning banner / Completed Archive Badge
+                            if (hasOverdue) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = ExpenseRed.copy(alpha = 0.16f),
+                                    border = BorderStroke(1.dp, ExpenseRed.copy(alpha = 0.6f)),
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Warning,
+                                            contentDescription = "اخطار قسط معوقه",
+                                            tint = ExpenseRed,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Text(
+                                            text = "هشدار: ${PersianNumberFormatter.formatDigits(planOverdueCount)} قسط معوقه دارد!",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = ExpenseRed
+                                        )
+                                    }
+                                }
+                            } else if (plan.isCompleted) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = IncomeGreen.copy(alpha = 0.14f),
+                                    border = BorderStroke(1.dp, IncomeGreen.copy(alpha = 0.4f)),
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = IncomeGreen,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(
+                                            text = "تسویه کامل (بایگانی‌شده)",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = IncomeGreen
+                                        )
+                                    }
+                                }
+                            }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = plan.title,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.ExtraBold
+                                        )
+                                        if (hasOverdue) {
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = ExpenseRed,
+                                                contentColor = Color.White
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.PriorityHigh,
+                                                        contentDescription = "معوقه",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(13.dp)
+                                                    )
+                                                    Text(
+                                                        text = "معوقه",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = Color.White
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = plan.title,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.ExtraBold
-                                    )
-                                    Text(
-                                        text = "شروع: ${PersianDateHelper.formatToPersianDate(plan.startDateMillis)} • اتمام: ${PersianDateHelper.formatToPersianDate(endDateMillis)}",
+                                        text = "${PersianDateHelper.formatToPersianDate(plan.startDateMillis)} تا ${PersianDateHelper.formatToPersianDate(endDateMillis)}",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = InstallmentScreenPurpleLight,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = if (plan.isCompleted) IncomeGreen.copy(alpha = 0.15f) else InstallmentScreenPurple.copy(alpha = 0.18f)
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = if (plan.isCompleted) IncomeGreen.copy(alpha = 0.16f) else accentColor.copy(alpha = 0.16f)
                                     ) {
                                         Text(
-                                            text = "${PersianNumberFormatter.toPersianDigits(percentPaid)}٪ پرداخت شده",
+                                            text = "${PersianNumberFormatter.formatDigits(percentPaid)}٪",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = if (plan.isCompleted) IncomeGreen else InstallmentScreenPurpleLight,
+                                            color = if (plan.isCompleted) IncomeGreen else accentColor,
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                         )
                                     }
@@ -334,18 +931,27 @@ fun InstallmentsScreen(
 
                             Spacer(modifier = Modifier.height(10.dp))
 
-                            // Paid So Far vs Remaining Outlook Boxes
+                            // Paid So Far vs Remaining Outlook Boxes - کاملاً متناسب و هم‌اندازه
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(IntrinsicSize.Min),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Surface(
                                     shape = RoundedCornerShape(12.dp),
                                     color = IncomeGreen.copy(alpha = 0.12f),
                                     border = BorderStroke(1.dp, IncomeGreen.copy(alpha = 0.35f)),
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
                                 ) {
-                                    Column(modifier = Modifier.padding(10.dp)) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(10.dp),
+                                        verticalArrangement = Arrangement.SpaceBetween
+                                    ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Icon(
                                                 Icons.Default.Verified,
@@ -355,12 +961,13 @@ fun InstallmentsScreen(
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text(
-                                                text = "تا الان پرداخت کردم",
+                                                text = "پرداخت شده",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = IncomeGreen,
                                                 fontWeight = FontWeight.Bold
                                             )
                                         }
+                                        Spacer(modifier = Modifier.height(4.dp))
                                         Text(
                                             text = PersianNumberFormatter.formatCurrency(paidSoFar, userPreferences.currency),
                                             style = MaterialTheme.typography.bodyMedium,
@@ -374,31 +981,39 @@ fun InstallmentsScreen(
 
                                 Surface(
                                     shape = RoundedCornerShape(12.dp),
-                                    color = InstallmentScreenPurple.copy(alpha = 0.12f),
-                                    border = BorderStroke(1.dp, InstallmentScreenPurple.copy(alpha = 0.35f)),
-                                    modifier = Modifier.weight(1f)
+                                    color = accentColor.copy(alpha = 0.12f),
+                                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
                                 ) {
-                                    Column(modifier = Modifier.padding(10.dp)) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(10.dp),
+                                        verticalArrangement = Arrangement.SpaceBetween
+                                    ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Icon(
                                                 Icons.Default.HourglassBottom,
                                                 contentDescription = null,
-                                                tint = InstallmentScreenPurpleLight,
+                                                tint = accentColor,
                                                 modifier = Modifier.size(13.dp)
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text(
                                                 text = "مانده اقساط",
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = InstallmentScreenPurpleLight,
+                                                color = accentColor,
                                                 fontWeight = FontWeight.Bold
                                             )
                                         }
+                                        Spacer(modifier = Modifier.height(4.dp))
                                         Text(
                                             text = PersianNumberFormatter.formatCurrency(remainingAmount, userPreferences.currency),
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = InstallmentScreenPurpleLight,
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -408,33 +1023,91 @@ fun InstallmentsScreen(
 
                             Spacer(modifier = Modifier.height(10.dp))
 
-                            LinearProgressIndicator(
-                                progress = { progress.coerceIn(0f, 1f) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(8.dp)
-                                    .clip(RoundedCornerShape(4.dp)),
-                                color = if (percentPaid >= 100) IncomeGreen else InstallmentScreenPurple,
-                                trackColor = MaterialTheme.colorScheme.surface
-                            )
+                            // Graphical Check-Tiles Preview Row (tappable to open detail / check installments)
+                            val previewTotal = plan.numberOfInstallments.coerceIn(1, 12)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                for (idx in 1..previewTotal) {
+                                    val isTicked = idx <= plan.paidInstallments
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(26.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(
+                                                if (isTicked) {
+                                                    Brush.linearGradient(
+                                                        colors = listOf(IncomeGreen, IncomeGreen.copy(alpha = 0.75f))
+                                                    )
+                                                } else {
+                                                    Brush.linearGradient(
+                                                        colors = listOf(
+                                                            accentColor.copy(alpha = 0.18f),
+                                                            accentColor.copy(alpha = 0.08f)
+                                                        )
+                                                    )
+                                                }
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isTicked) {
+                                            Icon(
+                                                Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = Color.Black,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        } else {
+                                            Text(
+                                                text = PersianNumberFormatter.formatDigits(idx),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = accentColor
+                                            )
+                                        }
+                                    }
+                                }
+                            }
 
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
                                     text = "هر قسط: ${PersianNumberFormatter.formatCurrency(plan.installmentAmount, userPreferences.currency)}",
                                     style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Text(
-                                    text = "${PersianNumberFormatter.toPersianDigits(plan.paidInstallments)} از ${PersianNumberFormatter.toPersianDigits(plan.numberOfInstallments)} قسط پاس شده",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = InstallmentScreenPurpleLight,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (plan.isCompleted) IncomeGreen.copy(alpha = 0.18f) else accentColor.copy(alpha = 0.16f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = if (plan.isCompleted) Icons.Default.CheckCircle else Icons.Default.TouchApp,
+                                            contentDescription = null,
+                                            tint = if (plan.isCompleted) IncomeGreen else accentColor,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "${PersianNumberFormatter.formatDigits(plan.paidInstallments)} از ${PersianNumberFormatter.formatDigits(plan.numberOfInstallments)} قسط",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (plan.isCompleted) IncomeGreen else accentColor,
+                                            fontWeight = FontWeight.ExtraBold
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -447,14 +1120,16 @@ fun InstallmentsScreen(
         AddInstallmentDialog(
             currency = userPreferences.currency,
             onDismiss = { showAddDialog = false },
-            onSave = { title, creditor, count, alreadyPaidCount, amount, day, startDateMillis, enableReminder, offsetDays, reminderHour, reminderMinute ->
+            onSave = { title, creditor, totalLoanAmount, count, alreadyPaidCount, amount, day, startDateMillis, enableReminder, offsetDays, reminderHour, reminderMinute ->
                 coroutineScope.launch {
                     val total = count * amount
+                    val effectiveLoanTotal = if (totalLoanAmount > 0L) totalLoanAmount else total
                     val safePaid = alreadyPaidCount.coerceIn(0, count)
                     val planId = repository.createInstallmentPlan(
                         plan = InstallmentPlanEntity(
                             title = title,
                             creditorOrCompany = creditor,
+                            totalLoanAmount = effectiveLoanTotal,
                             totalAmount = total,
                             numberOfInstallments = count,
                             installmentAmount = amount,
@@ -482,7 +1157,7 @@ fun InstallmentsScreen(
                             minute = reminderMinute
                         )
                         val remTitle = "یادآور قسط: $title"
-                        val remDesc = "قسط شماره ${PersianNumberFormatter.toPersianDigits(safePaid + 1)} به مبلغ ${PersianNumberFormatter.formatCurrency(amount, userPreferences.currency)}"
+                        val remDesc = "قسط شماره ${PersianNumberFormatter.formatDigits(safePaid + 1)} به مبلغ ${PersianNumberFormatter.formatCurrency(amount, userPreferences.currency)}"
                         val remId = repository.syncTargetReminder(
                             targetType = ReminderTargetType.INSTALLMENT,
                             targetId = planId,
@@ -497,7 +1172,7 @@ fun InstallmentsScreen(
                         }
                     }
 
-                    Toast.makeText(context, "برنامه اقساط با موفقیت ایجاد شد", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "اقساط ثبت شد", Toast.LENGTH_SHORT).show()
                     showAddDialog = false
                 }
             }
@@ -509,12 +1184,14 @@ fun InstallmentsScreen(
             plan = plan,
             currency = userPreferences.currency,
             onDismiss = { planToEdit = null },
-            onSave = { newTitle, newCreditor, newDay, newStartDateMillis, enableReminder, offsetDays, reminderHour, reminderMinute ->
+            onSave = { newTitle, newCreditor, newTotalLoanAmount, newDay, newStartDateMillis, enableReminder, offsetDays, reminderHour, reminderMinute ->
                 coroutineScope.launch {
+                    val effectiveLoanTotal = if (newTotalLoanAmount > 0L) newTotalLoanAmount else plan.totalAmount
                     repository.updateInstallmentPlan(
                         plan.copy(
                             title = newTitle,
                             creditorOrCompany = newCreditor,
+                            totalLoanAmount = effectiveLoanTotal,
                             dueDayOfMonth = newDay,
                             startDateMillis = newStartDateMillis
                         )
@@ -550,7 +1227,7 @@ fun InstallmentsScreen(
                     } else if (!enableReminder) {
                         repository.removeTargetReminders(ReminderTargetType.INSTALLMENT, plan.id)
                     }
-                    Toast.makeText(context, "برنامه اقساط بروزرسانی شد", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "اقساط بروزرسانی شد", Toast.LENGTH_SHORT).show()
                     planToEdit = null
                 }
             }
@@ -560,14 +1237,14 @@ fun InstallmentsScreen(
     planToDelete?.let { plan ->
         AlertDialog(
             onDismissRequest = { planToDelete = null },
-            title = { Text("حذف برنامه اقساط") },
-            text = { Text("آیا از حذف برنامه اقساط «${plan.title}» اطمینان دارید؟ تمامی اقساط و یادآورهای مربوطه نیز حذف خواهند شد.") },
+            title = { Text("حذف اقساط") },
+            text = { Text("آیا از حذف «${plan.title}» اطمینان دارید؟") },
             confirmButton = {
                 Button(
                     onClick = {
                         coroutineScope.launch {
                             repository.deleteInstallmentPlan(plan)
-                            Toast.makeText(context, "برنامه اقساط حذف شد", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "حذف شد", Toast.LENGTH_SHORT).show()
                             planToDelete = null
                         }
                     },
@@ -606,6 +1283,7 @@ fun AddInstallmentDialog(
     onSave: (
         title: String,
         creditor: String,
+        totalLoanAmount: Long,
         count: Int,
         alreadyPaidCount: Int,
         amount: Long,
@@ -619,6 +1297,7 @@ fun AddInstallmentDialog(
 ) {
     var title by remember { mutableStateOf("") }
     var creditor by remember { mutableStateOf("") }
+    var totalLoanAmountText by remember { mutableStateOf("") }
     var countText by remember { mutableStateOf("12") }
     var alreadyPaidText by remember { mutableStateOf("0") }
     var amountText by remember { mutableStateOf("") }
@@ -627,135 +1306,124 @@ fun AddInstallmentDialog(
     var showStartDatePicker by remember { mutableStateOf(false) }
 
     var enableReminder by remember { mutableStateOf(true) }
-    var offsetDays by remember { mutableIntStateOf(1) }
+    var offsetDays by remember { mutableIntStateOf(0) }
     var reminderHour by remember { mutableIntStateOf(9) }
     var reminderMinute by remember { mutableIntStateOf(0) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("افزودن وام یا برنامه اقساط", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("عنوان وام یا کالا (مثال: وام مسکن، خرید لپ‌تاپ)") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = creditor,
-                    onValueChange = { creditor = it },
-                    label = { Text("طرف حساب / بانک") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // Start Date Button (Scrollable Wheel Persian Date Picker)
-                OutlinedButton(
-                    onClick = { showStartDatePicker = true },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Outlined.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("تاریخ شروع اقساط: ${PersianDateHelper.formatToPersianDate(startDateMillis)}")
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = countText,
-                        onValueChange = { countText = PersianNumberFormatter.toEnglishDigits(it).filter { c -> c.isDigit() } },
-                        label = { Text("کل اقساط") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = alreadyPaidText,
-                        onValueChange = { alreadyPaidText = PersianNumberFormatter.toEnglishDigits(it).filter { c -> c.isDigit() } },
-                        label = { Text("پرداخت‌شده از قبل") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                OutlinedTextField(
-                    value = dayText,
-                    onValueChange = { dayText = PersianNumberFormatter.toEnglishDigits(it).filter { c -> c.isDigit() } },
-                    label = { Text("روز سررسید در هر ماه (۱ تا ۳۱)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                PersianAmountInput(
-                    value = amountText,
-                    onValueChange = { amountText = it },
-                    currency = currency,
-                    label = "مبلغ هر قسط"
-                )
-
-                ReminderConfigSection(
-                    isEnabled = enableReminder,
-                    onEnabledChange = { enableReminder = it },
-                    offsetDays = offsetDays,
-                    onOffsetDaysChange = { offsetDays = it },
-                    selectedHour = reminderHour,
-                    onHourChange = { reminderHour = it },
-                    selectedMinute = reminderMinute,
-                    onMinuteChange = { reminderMinute = it },
-                    title = "یادآور و آلارم سررسید قسط"
+    GraphicalFormDialog(
+        title = "افزودن قسط یا وام",
+        icon = Icons.Default.EventRepeat,
+        confirmText = "ثبت اقساط",
+        onConfirm = {
+            val count = countText.toIntOrNull() ?: 0
+            val paidBefore = alreadyPaidText.toIntOrNull() ?: 0
+            val amount = PersianNumberFormatter.parseAmount(amountText)
+            val totalLoan = PersianNumberFormatter.parseAmount(totalLoanAmountText)
+            val day = dayText.toIntOrNull()?.coerceIn(1, 31) ?: 1
+            if (title.isNotBlank() && count > 0 && amount > 0L) {
+                val effectiveTotalLoan = if (totalLoan > 0L) totalLoan else (count * amount)
+                onSave(
+                    title,
+                    creditor,
+                    effectiveTotalLoan,
+                    count,
+                    paidBefore.coerceIn(0, count),
+                    amount,
+                    day,
+                    startDateMillis,
+                    enableReminder,
+                    offsetDays,
+                    reminderHour,
+                    reminderMinute
                 )
             }
         },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val count = countText.toIntOrNull() ?: 0
-                    val paidBefore = alreadyPaidText.toIntOrNull() ?: 0
-                    val amount = PersianNumberFormatter.parseAmount(amountText)
-                    val day = dayText.toIntOrNull()?.coerceIn(1, 31) ?: 1
-                    if (title.isNotBlank() && count > 0 && amount > 0L) {
-                        onSave(
-                            title,
-                            creditor,
-                            count,
-                            paidBefore.coerceIn(0, count),
-                            amount,
-                            day,
-                            startDateMillis,
-                            enableReminder,
-                            offsetDays,
-                            reminderHour,
-                            reminderMinute
-                        )
-                    }
-                }
-            ) {
-                Text("ایجاد اقساط")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("انصراف")
-            }
+        onDismiss = onDismiss
+    ) {
+        DodotaTextField(
+            value = title,
+            onValueChange = { title = it },
+            label = "عنوان وام یا قسط",
+            leadingIcon = Icons.Default.EventRepeat,
+            modifier = Modifier.fillMaxWidth()
+        )
+        DodotaTextField(
+            value = creditor,
+            onValueChange = { creditor = it },
+            label = "طرف حساب / بانک",
+            leadingIcon = Icons.Default.AccountBalance,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        PersianAmountInput(
+            value = totalLoanAmountText,
+            onValueChange = { totalLoanAmountText = it },
+            currency = currency,
+            label = "مبلغ کل وام",
+            leadingIcon = Icons.Default.AccountBalanceWallet
+        )
+
+        PersianAmountInput(
+            value = amountText,
+            onValueChange = { amountText = it },
+            currency = currency,
+            label = "مبلغ هر قسط"
+        )
+
+        OutlinedButton(
+            onClick = { showStartDatePicker = true },
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Outlined.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("تاریخ شروع: ${PersianDateHelper.formatToPersianDate(startDateMillis)}")
         }
-    )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            DodotaTextField(
+                value = PersianNumberFormatter.formatDigits(countText, currency),
+                onValueChange = { countText = PersianNumberFormatter.toEnglishDigits(it).filter { c -> c.isDigit() } },
+                label = "کل اقساط",
+                leadingIcon = Icons.Default.Numbers,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f)
+            )
+            DodotaTextField(
+                value = PersianNumberFormatter.formatDigits(alreadyPaidText, currency),
+                onValueChange = { alreadyPaidText = PersianNumberFormatter.toEnglishDigits(it).filter { c -> c.isDigit() } },
+                label = "پرداخت‌شده",
+                leadingIcon = Icons.Default.CheckCircleOutline,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        DodotaTextField(
+            value = PersianNumberFormatter.formatDigits(dayText, currency),
+            onValueChange = { dayText = PersianNumberFormatter.toEnglishDigits(it).filter { c -> c.isDigit() } },
+            label = "روز سررسید ماهانه",
+            leadingIcon = Icons.Outlined.CalendarMonth,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        ReminderConfigSection(
+            isEnabled = enableReminder,
+            onEnabledChange = { enableReminder = it },
+            offsetDays = offsetDays,
+            onOffsetDaysChange = { offsetDays = it },
+            selectedHour = reminderHour,
+            onHourChange = { reminderHour = it },
+            selectedMinute = reminderMinute,
+            onMinuteChange = { reminderMinute = it },
+            title = "یادآور قسط",
+            dueDateMillis = startDateMillis
+        )
+    }
 
     if (showStartDatePicker) {
         PersianDatePickerDialog(
@@ -779,6 +1447,7 @@ fun EditInstallmentPlanDialog(
     onSave: (
         title: String,
         creditor: String,
+        totalLoanAmount: Long,
         day: Int,
         startDateMillis: Long,
         enableReminder: Boolean,
@@ -789,91 +1458,95 @@ fun EditInstallmentPlanDialog(
 ) {
     var title by remember { mutableStateOf(plan.title) }
     var creditor by remember { mutableStateOf(plan.creditorOrCompany) }
+    var totalLoanAmountText by remember {
+        mutableStateOf(
+            (if (plan.totalLoanAmount > 0L) plan.totalLoanAmount else plan.totalAmount).toString()
+        )
+    }
     var dayText by remember { mutableStateOf(plan.dueDayOfMonth.toString()) }
     var startDateMillis by remember { mutableLongStateOf(plan.startDateMillis) }
     var showStartDatePicker by remember { mutableStateOf(false) }
 
     var enableReminder by remember { mutableStateOf(true) }
-    var offsetDays by remember { mutableIntStateOf(1) }
+    var offsetDays by remember { mutableIntStateOf(0) }
     var reminderHour by remember { mutableIntStateOf(9) }
     var reminderMinute by remember { mutableIntStateOf(0) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("ویرایش برنامه اقساط", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("عنوان وام یا کالا") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = creditor,
-                    onValueChange = { creditor = it },
-                    label = { Text("طرف حساب / بانک") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedButton(
-                    onClick = { showStartDatePicker = true },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Outlined.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("تاریخ شروع اقساط: ${PersianDateHelper.formatToPersianDate(startDateMillis)}")
-                }
-                OutlinedTextField(
-                    value = dayText,
-                    onValueChange = { dayText = PersianNumberFormatter.toEnglishDigits(it).filter { c -> c.isDigit() } },
-                    label = { Text("روز ماه سررسید (۱ تا ۳۱)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                ReminderConfigSection(
-                    isEnabled = enableReminder,
-                    onEnabledChange = { enableReminder = it },
-                    offsetDays = offsetDays,
-                    onOffsetDaysChange = { offsetDays = it },
-                    selectedHour = reminderHour,
-                    onHourChange = { reminderHour = it },
-                    selectedMinute = reminderMinute,
-                    onMinuteChange = { reminderMinute = it },
-                    title = "یادآور و آلارم سررسید قسط"
+    GraphicalFormDialog(
+        title = "ویرایش اقساط",
+        icon = Icons.Default.EventRepeat,
+        confirmText = "بروزرسانی",
+        onConfirm = {
+            val day = dayText.toIntOrNull()?.coerceIn(1, 31) ?: plan.dueDayOfMonth
+            val parsedLoanTotal = PersianNumberFormatter.parseAmount(totalLoanAmountText)
+            if (title.isNotBlank()) {
+                onSave(
+                    title,
+                    creditor,
+                    if (parsedLoanTotal > 0L) parsedLoanTotal else plan.totalAmount,
+                    day,
+                    startDateMillis,
+                    enableReminder,
+                    offsetDays,
+                    reminderHour,
+                    reminderMinute
                 )
             }
         },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val day = dayText.toIntOrNull()?.coerceIn(1, 31) ?: plan.dueDayOfMonth
-                    if (title.isNotBlank()) {
-                        onSave(title, creditor, day, startDateMillis, enableReminder, offsetDays, reminderHour, reminderMinute)
-                    }
-                }
-            ) {
-                Text("بروزرسانی")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("انصراف")
-            }
+        onDismiss = onDismiss
+    ) {
+        DodotaTextField(
+            value = title,
+            onValueChange = { title = it },
+            label = "عنوان وام یا قسط",
+            leadingIcon = Icons.Default.EventRepeat,
+            modifier = Modifier.fillMaxWidth()
+        )
+        DodotaTextField(
+            value = creditor,
+            onValueChange = { creditor = it },
+            label = "طرف حساب / بانک",
+            leadingIcon = Icons.Default.AccountBalance,
+            modifier = Modifier.fillMaxWidth()
+        )
+        PersianAmountInput(
+            value = totalLoanAmountText,
+            onValueChange = { totalLoanAmountText = it },
+            currency = currency,
+            label = "مبلغ کل وام",
+            leadingIcon = Icons.Default.AccountBalanceWallet
+        )
+        OutlinedButton(
+            onClick = { showStartDatePicker = true },
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Outlined.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("تاریخ شروع: ${PersianDateHelper.formatToPersianDate(startDateMillis)}")
         }
-    )
+        DodotaTextField(
+            value = PersianNumberFormatter.formatDigits(dayText, currency),
+            onValueChange = { dayText = PersianNumberFormatter.toEnglishDigits(it).filter { c -> c.isDigit() } },
+            label = "روز سررسید ماهانه",
+            leadingIcon = Icons.Outlined.CalendarMonth,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        ReminderConfigSection(
+            isEnabled = enableReminder,
+            onEnabledChange = { enableReminder = it },
+            offsetDays = offsetDays,
+            onOffsetDaysChange = { offsetDays = it },
+            selectedHour = reminderHour,
+            onHourChange = { reminderHour = it },
+            selectedMinute = reminderMinute,
+            onMinuteChange = { reminderMinute = it },
+            title = "یادآور قسط",
+            dueDateMillis = startDateMillis
+        )
+    }
 
     if (showStartDatePicker) {
         PersianDatePickerDialog(
@@ -886,3 +1559,4 @@ fun EditInstallmentPlanDialog(
         )
     }
 }
+

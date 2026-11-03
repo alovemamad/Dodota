@@ -5,8 +5,10 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.*
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -15,10 +17,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -27,10 +35,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -40,12 +54,14 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import ir.mmd.dodota.data.model.AppCurrency
 import ir.mmd.dodota.data.model.AppThemeMode
 import ir.mmd.dodota.data.model.TransactionType
@@ -70,7 +86,12 @@ fun DodotaTopBar(
     val isVipRed = themeMode == AppThemeMode.VIP_RED
     val accentColor = if (isVipRed) VipRedPrimary else MaterialTheme.colorScheme.primary
 
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(top = 4.dp)
+    ) {
         TopAppBar(
             windowInsets = WindowInsets(0, 0, 0, 0),
             title = {
@@ -104,7 +125,7 @@ fun DodotaTopBar(
                     IconButton(
                         onClick = onBackClick,
                         modifier = Modifier
-                            .padding(start = 6.dp)
+                            .padding(start = 6.dp, top = 2.dp)
                             .clip(RoundedCornerShape(14.dp))
                             .background(
                                 if (isVipRed) VipRedSurfaceVariant.copy(alpha = 0.85f)
@@ -125,7 +146,13 @@ fun DodotaTopBar(
                     }
                 }
             },
-            actions = actions,
+            actions = {
+                Row(
+                    modifier = Modifier.padding(top = 4.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    content = actions
+                )
+            },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.background,
                 titleContentColor = MaterialTheme.colorScheme.onBackground
@@ -149,8 +176,8 @@ fun DodotaTopBar(
 }
 
 /**
- * Glassmorphic container card that automatically renders frosted dark glass + neon specular border
- * and subtle top-edge inner sheen when VIP Red or dark/combo themes are active.
+ * Glassmorphic shadowed container card that renders frosted glass + neon specular border
+ * and subtle elevation shadow coordinated with the active theme.
  */
 @Composable
 fun GlassCard(
@@ -159,6 +186,8 @@ fun GlassCard(
     accentColor: Color = MaterialTheme.colorScheme.primary,
     borderColor: Color? = null,
     isHighlighted: Boolean = false,
+    elevation: Dp? = null,
+    shadowElevation: Dp = elevation ?: if (isHighlighted) 8.dp else 4.dp,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -174,43 +203,39 @@ fun GlassCard(
 
     val borderStroke = if (borderColor != null) {
         BorderStroke(
-            width = if (isHighlighted) 1.6.dp else 1.1.dp,
-            brush = Brush.linearGradient(
-                colors = listOf(
-                    borderColor,
-                    Color.White.copy(alpha = 0.16f),
-                    borderColor.copy(alpha = 0.48f)
-                )
-            )
+            width = if (isHighlighted) 1.5.dp else 1.dp,
+            color = if (isHighlighted) borderColor else borderColor.copy(alpha = 0.55f)
         )
     } else if (isGlassTheme) {
         BorderStroke(
-            width = if (isHighlighted) 1.6.dp else 1.1.dp,
-            brush = Brush.linearGradient(
-                colors = listOf(
-                    effectiveAccent.copy(alpha = if (isHighlighted) 0.8f else 0.45f),
-                    Color.White.copy(alpha = 0.12f),
-                    effectiveAccent.copy(alpha = if (isHighlighted) 0.5f else 0.22f)
-                )
-            )
+            width = if (isHighlighted) 1.5.dp else 1.dp,
+            color = effectiveAccent.copy(alpha = if (isHighlighted) 0.65f else 0.32f)
         )
     } else if (isHighlighted) {
-        BorderStroke(1.6.dp, effectiveAccent.copy(alpha = 0.6f))
+        BorderStroke(1.5.dp, effectiveAccent.copy(alpha = 0.6f))
     } else {
-        BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+        BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.22f))
     }
 
     val containerColor = if (themeMode == AppThemeMode.VIP_RED) {
-        VipRedSurfaceVariant.copy(alpha = 0.88f)
+        VipRedSurfaceVariant.copy(alpha = 0.90f)
     } else {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f)
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.94f)
     }
+
+    val baseModifier = modifier.shadow(
+        elevation = shadowElevation,
+        shape = shape,
+        ambientColor = effectiveAccent.copy(alpha = 0.20f),
+        spotColor = effectiveAccent.copy(alpha = 0.28f)
+    )
 
     Card(
         shape = shape,
         colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = borderStroke,
-        modifier = if (onClick != null) modifier.clip(shape).clickable { onClick() } else modifier,
+        modifier = if (onClick != null) baseModifier.clip(shape).clickable { onClick() } else baseModifier,
         content = content
     )
 }
@@ -568,20 +593,19 @@ fun ReminderConfigSection(
     selectedMinute: Int,
     onMinuteChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    title: String = "یادآور و آلارم هوشمند سررسید"
+    title: String = "یادآور",
+    dueDateMillis: Long = System.currentTimeMillis(),
+    onDueDateChange: ((Long) -> Unit)? = null
 ) {
     val enabled = isEnabled
     val hour = selectedHour
     val minute = selectedMinute
     val context = LocalContext.current
-    var hasNotifPermission by remember {
-        mutableStateOf(AlarmHelper.isNotificationPermissionGranted(context))
-    }
+    val useEn = LocalUseEnglishDigits.current || PersianNumberFormatter.globalUseEnglishDigits
 
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        hasNotifPermission = granted
         if (!granted) {
             Toast.makeText(
                 context,
@@ -591,16 +615,52 @@ fun ReminderConfigSection(
         }
     }
 
-    var customDaysInput by remember(offsetDays) {
-        mutableStateOf(offsetDays.toString())
+    var showGraphicalCalendar by remember { mutableStateOf(false) }
+
+    val selectedReminderDateMillis = remember(dueDateMillis, offsetDays) {
+        java.util.Calendar.getInstance().apply {
+            timeInMillis = dueDateMillis
+            add(java.util.Calendar.DAY_OF_YEAR, -offsetDays)
+        }.timeInMillis
+    }
+
+    if (showGraphicalCalendar) {
+        PersianDatePickerDialog(
+            initialDateMillis = selectedReminderDateMillis,
+            onDateSelected = { pickedMillis ->
+                if (onDueDateChange != null) {
+                    onDueDateChange(pickedMillis)
+                    onOffsetDaysChange(0)
+                } else {
+                    val dueCal = java.util.Calendar.getInstance().apply {
+                        timeInMillis = dueDateMillis
+                        set(java.util.Calendar.HOUR_OF_DAY, 12)
+                        set(java.util.Calendar.MINUTE, 0)
+                        set(java.util.Calendar.SECOND, 0)
+                        set(java.util.Calendar.MILLISECOND, 0)
+                    }
+                    val pickedCal = java.util.Calendar.getInstance().apply {
+                        timeInMillis = pickedMillis
+                        set(java.util.Calendar.HOUR_OF_DAY, 12)
+                        set(java.util.Calendar.MINUTE, 0)
+                        set(java.util.Calendar.SECOND, 0)
+                        set(java.util.Calendar.MILLISECOND, 0)
+                    }
+                    val diffDays = Math.round((dueCal.timeInMillis - pickedCal.timeInMillis) / (24.0 * 60.0 * 60.0 * 1000.0)).toInt()
+                    onOffsetDaysChange(diffDays)
+                }
+                showGraphicalCalendar = false
+            },
+            onDismiss = { showGraphicalCalendar = false }
+        )
     }
 
     GlassCard(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(18.dp),
         isHighlighted = enabled
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -609,8 +669,8 @@ fun ReminderConfigSection(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                     Box(
                         modifier = Modifier
-                            .size(38.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
                             .background(
                                 if (enabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
                                 else MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
@@ -621,7 +681,7 @@ fun ReminderConfigSection(
                             imageVector = Icons.Default.NotificationsActive,
                             contentDescription = null,
                             tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(10.dp))
@@ -645,205 +705,293 @@ fun ReminderConfigSection(
             }
 
             AnimatedVisibility(visible = enabled) {
-                Column(modifier = Modifier.padding(top = 12.dp)) {
+                val formattedTime = "${PersianNumberFormatter.formatDigits(hour.toString().padStart(2, '0'), useEn)}:${PersianNumberFormatter.formatDigits(minute.toString().padStart(2, '0'), useEn)}"
+                val formattedDate = PersianDateHelper.formatToPersianDate(selectedReminderDateMillis, useEn)
+
+                Column(modifier = Modifier.padding(top = 10.dp)) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Custom user-defined offset days (Item 7: no fixed presets, user chooses freely)
-                    Text(
-                        text = "تعیین دلخواه زمان یادآوری (چند روز قبل از سررسید؟)",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                FilledTonalIconButton(
-                                    onClick = {
-                                        val next = (offsetDays - 1).coerceAtLeast(0)
-                                        onOffsetDaysChange(next)
-                                        customDaysInput = next.toString()
-                                    },
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Icon(Icons.Default.Remove, contentDescription = "کمتر")
-                                }
-
-                                OutlinedTextField(
-                                    value = PersianNumberFormatter.toPersianDigits(customDaysInput),
-                                    onValueChange = { raw ->
-                                        val clean = PersianNumberFormatter.toEnglishDigits(raw).filter { it.isDigit() }.take(3)
-                                        customDaysInput = clean
-                                        val parsed = clean.toIntOrNull() ?: 0
-                                        onOffsetDaysChange(parsed.coerceIn(0, 365))
-                                    },
-                                    label = { Text("تعداد روز قبل") },
-                                    suffix = { Text("روز قبل") },
-                                    singleLine = true,
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    shape = RoundedCornerShape(14.dp),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(horizontal = 10.dp)
-                                )
-
-                                FilledTonalIconButton(
-                                    onClick = {
-                                        val next = (offsetDays + 1).coerceAtMost(365)
-                                        onOffsetDaysChange(next)
-                                        customDaysInput = next.toString()
-                                    },
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Icon(Icons.Default.Add, contentDescription = "بیشتر")
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = when (offsetDays) {
-                                    0 -> "یادآوری در همان روز سررسید انجام می‌شود"
-                                    1 -> "یادآوری ۱ روز قبل از سررسید انجام می‌شود"
-                                    else -> "یادآوری ${PersianNumberFormatter.toPersianDigits(offsetDays)} روز قبل از سررسید انجام می‌شود"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.align(Alignment.CenterHorizontally)
-                            )
-                        }
-                    }
-
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Expandable Hour & Minute Selector
-                    val formattedTime = "${PersianNumberFormatter.toPersianDigits(hour.toString().padStart(2, '0'))}:${PersianNumberFormatter.toPersianDigits(minute.toString().padStart(2, '0'))}"
-                    DodotaExpandableSelector(
-                        label = "ساعت پخش زنگ هشدار",
-                        selectedTitle = "ساعت $formattedTime",
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Schedule,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(
+                        // Graphical Calendar Picker Button
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .weight(1.2f)
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable { showGraphicalCalendar = true }
+                                .testTag("reminder_date_picker_button")
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
-                                modifier = Modifier.weight(1f)
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(RoundedCornerShape(9.dp))
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    IconButton(
-                                        onClick = { onMinuteChange((minute + 5) % 60) },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(Icons.Default.Add, contentDescription = "افزایش دقیقه", modifier = Modifier.size(16.dp))
-                                    }
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(
-                                            text = PersianNumberFormatter.toPersianDigits(minute.toString().padStart(2, '0')),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.ExtraBold
-                                        )
-                                        Text("دقیقه", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                                    }
-                                    IconButton(
-                                        onClick = { onMinuteChange(if (minute - 5 < 0) 55 else minute - 5) },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(Icons.Default.Remove, contentDescription = "کاهش دقیقه", modifier = Modifier.size(16.dp))
-                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.CalendarMonth,
+                                        contentDescription = "انتخاب روز یادآوری",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
-                            }
-
-                            Text(":", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
-
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    IconButton(
-                                        onClick = { onHourChange((hour + 1) % 24) },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(Icons.Default.Add, contentDescription = "افزایش ساعت", modifier = Modifier.size(16.dp))
-                                    }
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(
-                                            text = PersianNumberFormatter.toPersianDigits(hour.toString().padStart(2, '0')),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.ExtraBold
-                                        )
-                                        Text("ساعت", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                                    }
-                                    IconButton(
-                                        onClick = { onHourChange(if (hour - 1 < 0) 23 else hour - 1) },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(Icons.Default.Remove, contentDescription = "کاهش ساعت", modifier = Modifier.size(16.dp))
-                                    }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "روز یادآوری",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = formattedDate,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
                             }
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    OutlinedButton(
-                        onClick = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !AlarmHelper.isNotificationPermissionGranted(context)) {
-                                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            } else {
-                                ReminderAlarmReceiver.showAlarmNotification(
-                                    context = context,
-                                    notifId = (System.currentTimeMillis() % 10000).toInt(),
-                                    title = "تست زنگ هشدار دُدوتا",
-                                    message = "سیستم آلارم و یادآور شما به درستی فعال است."
-                                )
-                                Toast.makeText(context, "🔔 اعلان و صدای هشدار آزمایشی ارسال شد!", Toast.LENGTH_SHORT).show()
+                        // Phone Clock Time Picker Button
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.10f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)),
+                            modifier = Modifier
+                                .weight(0.9f)
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable {
+                                    android.app.TimePickerDialog(
+                                        context,
+                                        { _, pickedHour, pickedMinute ->
+                                            onHourChange(pickedHour)
+                                            onMinuteChange(pickedMinute)
+                                        },
+                                        hour,
+                                        minute,
+                                        true
+                                    ).show()
+                                }
+                                .testTag("reminder_time_picker_button")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(RoundedCornerShape(9.dp))
+                                        .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AccessTime,
+                                        contentDescription = "انتخاب ساعت",
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "ساعت",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = formattedTime,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
                             }
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("تست فوری زنگ و اعلان هشدار", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun DodotaTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String = "",
+    modifier: Modifier = Modifier,
+    placeholder: String? = null,
+    leadingIcon: ImageVector? = Icons.Default.EditNote,
+    iconTint: Color = MaterialTheme.colorScheme.primary,
+    trailingContent: (@Composable () -> Unit)? = null,
+    prefixText: String? = null,
+    suffixText: String? = null,
+    suffix: (@Composable () -> Unit)? = null,
+    singleLine: Boolean = true,
+    minLines: Int = 1,
+    maxLines: Int = if (singleLine) 1 else 4,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    shape: Shape = RoundedCornerShape(18.dp),
+    isError: Boolean = false,
+    supportingText: String? = null,
+    formatNumericWithCommas: Boolean = false
+) {
+    val useEn = LocalUseEnglishDigits.current || PersianNumberFormatter.globalUseEnglishDigits
+    val effectiveSuffix: (@Composable () -> Unit)? = suffix ?: if (suffixText != null) {
+        { Text(suffixText, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline) }
+    } else null
+
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val coroutineScope = rememberCoroutineScope()
+    val focusBringModifier = Modifier
+        .bringIntoViewRequester(bringIntoViewRequester)
+        .onFocusEvent { focusState ->
+            if (focusState.isFocused) {
+                coroutineScope.launch {
+                    kotlinx.coroutines.delay(220)
+                    bringIntoViewRequester.bringIntoView()
+                }
+            }
+        }
+
+    val leadingIconContent: (@Composable () -> Unit)? = if (leadingIcon != null) {
+        {
+            Box(
+                modifier = Modifier
+                    .padding(start = 6.dp)
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                iconTint.copy(alpha = 0.20f),
+                                iconTint.copy(alpha = 0.08f)
+                            )
+                        )
+                    )
+                    .border(1.dp, iconTint.copy(alpha = 0.30f), RoundedCornerShape(11.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = leadingIcon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    } else null
+
+    if (formatNumericWithCommas) {
+        val displayStr = remember(value, useEn) {
+            PersianNumberFormatter.formatInputWithCommas(value, useEn)
+        }
+        OutlinedTextField(
+            value = TextFieldValue(
+                text = displayStr,
+                selection = TextRange(displayStr.length)
+            ),
+            onValueChange = { tfv ->
+                val clean = PersianNumberFormatter.toEnglishDigits(tfv.text)
+                    .filter { it.isDigit() }
+                    .trimStart('0')
+                    .ifEmpty { if (tfv.text.any { it == '0' || it == '۰' }) "0" else "" }
+                if (clean.length <= 15) {
+                    onValueChange(clean)
+                    coroutineScope.launch {
+                        bringIntoViewRequester.bringIntoView()
+                    }
+                }
+            },
+            label = if (label.isNotEmpty()) {
+                { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            } else null,
+            placeholder = if (placeholder != null) {
+                { Text(placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            } else null,
+            leadingIcon = leadingIconContent,
+            trailingIcon = trailingContent,
+            prefix = if (prefixText != null) { { Text(prefixText, fontWeight = FontWeight.Bold, color = iconTint) } } else null,
+            suffix = effectiveSuffix,
+            supportingText = if (supportingText != null) { { Text(supportingText) } } else null,
+            isError = isError,
+            singleLine = singleLine,
+            minLines = minLines,
+            maxLines = maxLines,
+            keyboardOptions = keyboardOptions,
+            visualTransformation = visualTransformation,
+            shape = shape,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = iconTint,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
+            ),
+            modifier = modifier
+                .fillMaxWidth()
+                .then(focusBringModifier)
+        )
+    } else {
+        val isNumKeyboard = keyboardOptions.keyboardType == KeyboardType.Number ||
+                keyboardOptions.keyboardType == KeyboardType.Phone ||
+                keyboardOptions.keyboardType == KeyboardType.Decimal
+        val displayVal = if (isNumKeyboard) PersianNumberFormatter.formatDigits(value, useEn) else value
+
+        OutlinedTextField(
+            value = displayVal,
+            onValueChange = { raw ->
+                if (isNumKeyboard) {
+                    onValueChange(PersianNumberFormatter.toEnglishDigits(raw))
+                } else {
+                    onValueChange(raw)
+                }
+                coroutineScope.launch {
+                    bringIntoViewRequester.bringIntoView()
+                }
+            },
+            label = if (label.isNotEmpty()) {
+                { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            } else null,
+            placeholder = if (placeholder != null) {
+                { Text(placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            } else null,
+            leadingIcon = leadingIconContent,
+            trailingIcon = trailingContent,
+            prefix = if (prefixText != null) { { Text(prefixText, fontWeight = FontWeight.Bold, color = iconTint) } } else null,
+            suffix = effectiveSuffix,
+            supportingText = if (supportingText != null) { { Text(supportingText) } } else null,
+            isError = isError,
+            singleLine = singleLine,
+            minLines = minLines,
+            maxLines = maxLines,
+            keyboardOptions = keyboardOptions,
+            visualTransformation = visualTransformation,
+            shape = shape,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = iconTint,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
+            ),
+            modifier = modifier
+                .fillMaxWidth()
+                .then(focusBringModifier)
+        )
     }
 }
 
@@ -854,21 +1002,22 @@ fun PersianAmountInput(
     label: String,
     currency: AppCurrency = AppCurrency.TOMAN,
     modifier: Modifier = Modifier,
+    leadingIcon: ImageVector = Icons.Default.Payments,
     isError: Boolean = false,
     errorMessage: String? = null
 ) {
+    val useEn = currency.isEnglishDigits || LocalUseEnglishDigits.current || PersianNumberFormatter.globalUseEnglishDigits
     val numericValue = PersianNumberFormatter.parseNumericValue(value)
-    val formattedDisplay = remember(value, currency) {
+    val formattedDisplay = remember(value, useEn) {
         if (value.isBlank()) {
             ""
         } else if (numericValue > 0L) {
-            PersianNumberFormatter.formatWithCommas(numericValue, currency.isEnglishDigits)
+            PersianNumberFormatter.formatNumber(numericValue, useCommas = true, isEnglishDigits = useEn)
         } else {
-            if (currency.isEnglishDigits) PersianNumberFormatter.toEnglishDigits(value)
-            else PersianNumberFormatter.toPersianDigits(value)
+            PersianNumberFormatter.formatInputWithCommas(value, useEn)
         }
     }
-    val formattedPreview = if (numericValue > 0) {
+    val formattedPreview = if (numericValue > 0L) {
         PersianNumberFormatter.formatCurrency(numericValue, currency)
     } else ""
 
@@ -892,13 +1041,21 @@ fun PersianAmountInput(
                 Box(
                     modifier = Modifier
                         .padding(start = 6.dp)
-                        .size(34.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                                )
+                            )
+                        )
+                        .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.32f), RoundedCornerShape(11.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Payments,
+                        imageVector = leadingIcon,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(18.dp)
@@ -908,7 +1065,8 @@ fun PersianAmountInput(
             trailingIcon = {
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                    border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                     modifier = Modifier.padding(end = 8.dp)
                 ) {
                     Text(
@@ -938,8 +1096,8 @@ fun PersianAmountInput(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
                 unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.38f),
-                focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
-                unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f)
+                focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
             ),
             modifier = Modifier
                 .fillMaxWidth()
@@ -954,110 +1112,354 @@ fun PersianDatePickerDialog(
     onDateSelected: (Long) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val initialPDate = PersianDateHelper.fromMillis(initialDateMillis)
+    val useEn = LocalUseEnglishDigits.current || PersianNumberFormatter.globalUseEnglishDigits
+    val todayPDate = remember { PersianDateHelper.getCurrentPersianDate() }
+    val initialPDate = remember(initialDateMillis) { PersianDateHelper.fromMillis(initialDateMillis) }
     var selectedYear by remember { mutableIntStateOf(initialPDate.year) }
     var selectedMonth by remember { mutableIntStateOf(initialPDate.month) }
     var selectedDay by remember { mutableIntStateOf(initialPDate.day) }
+    var isSelectingYearInDialog by remember { mutableStateOf(false) }
 
     val daysInMonth = PersianDateHelper.getDaysInPersianMonth(selectedYear, selectedMonth)
     if (selectedDay > daysInMonth) {
         selectedDay = daysInMonth
     }
 
+    val startWeekdayOffset = remember(selectedYear, selectedMonth) {
+        val firstDayMillis = PersianDateHelper.toMillis(selectedYear, selectedMonth, 1)
+        val cal = java.util.Calendar.getInstance()
+        cal.timeInMillis = firstDayMillis
+        when (cal.get(java.util.Calendar.DAY_OF_WEEK)) {
+            java.util.Calendar.SATURDAY -> 0
+            java.util.Calendar.SUNDAY -> 1
+            java.util.Calendar.MONDAY -> 2
+            java.util.Calendar.TUESDAY -> 3
+            java.util.Calendar.WEDNESDAY -> 4
+            java.util.Calendar.THURSDAY -> 5
+            java.util.Calendar.FRIDAY -> 6
+            else -> 0
+        }
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         GlassCard(
-            shape = RoundedCornerShape(26.dp),
+            shape = RoundedCornerShape(24.dp),
             isHighlighted = true,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 400.dp)
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding()
         ) {
             Column(
-                modifier = Modifier.padding(22.dp),
+                modifier = Modifier.padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "انتخاب تاریخ شمسی",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.ExtraBold
-                )
-                Text(
-                    text = "با کشیدن (اسکرول) روی اعداد یا دکمه‌ها تاریخ را تغییر دهید",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
+                // Graphical Header Banner
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(vertical = 10.dp, horizontal = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Year navigation با امکان لمس روی سال برای باز شدن فهرست سال‌ها
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            IconButton(
+                                onClick = { selectedYear-- },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.ChevronRight,
+                                    contentDescription = "سال قبل",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { isSelectingYearInDialog = !isSelectingYearInDialog }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = PersianNumberFormatter.formatNumber(selectedYear, useCommas = false, isEnglishDigits = useEn),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Icon(
+                                    Icons.Default.ArrowDropDown,
+                                    contentDescription = "انتخاب سال",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = { selectedYear++ },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.ChevronLeft,
+                                    contentDescription = "سال بعد",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
+                        // Month navigation
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            FilledTonalIconButton(
+                                onClick = {
+                                    if (selectedMonth > 1) {
+                                        selectedMonth--
+                                    } else {
+                                        selectedMonth = 12
+                                        selectedYear--
+                                    }
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Default.ChevronRight, contentDescription = "ماه قبل", modifier = Modifier.size(18.dp))
+                            }
+
+                            Text(
+                                text = "${PersianNumberFormatter.formatNumber(selectedDay, useCommas = false, isEnglishDigits = useEn)} ${PersianDateHelper.PERSIAN_MONTHS[selectedMonth - 1]}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+
+                            FilledTonalIconButton(
+                                onClick = {
+                                    if (selectedMonth < 12) {
+                                        selectedMonth++
+                                    } else {
+                                        selectedMonth = 1
+                                        selectedYear++
+                                    }
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Default.ChevronLeft, contentDescription = "ماه بعد", modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (isSelectingYearInDialog) {
+                    val dialogYearsList = remember(todayPDate.year) {
+                        (todayPDate.year - 20..todayPDate.year + 20).toList()
+                    }
+                    val dialogGridState = rememberLazyGridState(
+                        initialFirstVisibleItemIndex = (dialogYearsList.indexOf(selectedYear) - 3).coerceAtLeast(0)
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "سال مورد نظر را انتخاب کنید:",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            TextButton(
+                                onClick = { isSelectingYearInDialog = false },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("تأیید و برگشت", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(3),
+                            state = dialogGridState,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(230.dp)
+                        ) {
+                            items(dialogYearsList) { y ->
+                                val isSelected = y == selectedYear
+                                val isCurrentYear = y == todayPDate.year
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary
+                                    else if (isCurrentYear) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                    else MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                                    border = BorderStroke(
+                                        if (isSelected) 1.5.dp else 1.dp,
+                                        if (isSelected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+                                    ),
+                                    modifier = Modifier.clickable {
+                                        selectedYear = y
+                                        isSelectingYearInDialog = false
+                                    }
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 12.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = PersianNumberFormatter.formatNumber(y, useCommas = false, isEnglishDigits = useEn),
+                                            style = if (isSelected) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,
+                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Weekdays Header Row
+                    val weekInitials = listOf("ش", "ی", "د", "س", "چ", "پ", "ج")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        weekInitials.forEachIndexed { index, dayLabel ->
+                            Text(
+                                text = dayLabel,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (index == 6) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Graphical 7-Column Calendar Grid
+                    val totalCells = startWeekdayOffset + daysInMonth
+                    val rows = (totalCells + 6) / 7
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        for (row in 0 until rows) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                for (col in 0 until 7) {
+                                    val cellIndex = row * 7 + col
+                                    val dayNum = cellIndex - startWeekdayOffset + 1
+                                    if (dayNum in 1..daysInMonth) {
+                                        val isSelected = dayNum == selectedDay
+                                        val isToday = selectedYear == todayPDate.year &&
+                                                selectedMonth == todayPDate.month &&
+                                                dayNum == todayPDate.day
+
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(38.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(
+                                                    when {
+                                                        isSelected -> MaterialTheme.colorScheme.primary
+                                                        isToday -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                                                        else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
+                                                    }
+                                                )
+                                                .border(
+                                                    width = if (isSelected || isToday) 1.dp else 0.5.dp,
+                                                    color = when {
+                                                        isSelected -> MaterialTheme.colorScheme.primary
+                                                        isToday -> MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                                                        else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+                                                    },
+                                                    shape = RoundedCornerShape(10.dp)
+                                                )
+                                                .clickable { selectedDay = dayNum },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = PersianNumberFormatter.formatNumber(dayNum, useCommas = false, isEnglishDigits = useEn),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = if (isSelected || isToday) FontWeight.ExtraBold else FontWeight.Medium,
+                                                color = when {
+                                                    isSelected -> MaterialTheme.colorScheme.onPrimary
+                                                    col == 6 -> MaterialTheme.colorScheme.error
+                                                    else -> MaterialTheme.colorScheme.onSurface
+                                                }
+                                            )
+                                        }
+                                    } else {
+                                        Spacer(modifier = Modifier.weight(1f).height(38.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Date Preview Card
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "${PersianNumberFormatter.toPersianDigits(selectedDay)} ${PersianDateHelper.PERSIAN_MONTHS[selectedMonth - 1]} ${PersianNumberFormatter.toPersianDigits(selectedYear)}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        fontWeight = FontWeight.ExtraBold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(vertical = 12.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                // Scrollable Wheel Selectors Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Day Wheel
-                    WheelPickerColumn(
-                        label = "روز",
-                        value = selectedDay,
-                        range = 1..daysInMonth,
-                        onValueChange = { selectedDay = it },
-                        modifier = Modifier.weight(0.9f)
-                    )
-
-                    // Month Wheel
-                    WheelPickerColumn(
-                        label = "ماه",
-                        value = selectedMonth,
-                        range = 1..12,
-                        displayTransform = { PersianDateHelper.PERSIAN_MONTHS[it - 1] },
-                        onValueChange = { selectedMonth = it },
-                        modifier = Modifier.weight(1.3f)
-                    )
-
-                    // Year Wheel
-                    WheelPickerColumn(
-                        label = "سال",
-                        value = selectedYear,
-                        range = (initialPDate.year - 10)..(initialPDate.year + 10),
-                        onValueChange = { selectedYear = it },
-                        modifier = Modifier.weight(1.05f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(22.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("انصراف")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
+                    TextButton(
                         onClick = {
-                            val millis = PersianDateHelper.toMillis(selectedYear, selectedMonth, selectedDay)
-                            onDateSelected(millis)
-                        },
-                        shape = RoundedCornerShape(14.dp)
+                            selectedYear = todayPDate.year
+                            selectedMonth = todayPDate.month
+                            selectedDay = todayPDate.day
+                        }
                     ) {
-                        Text("تأیید تاریخ", fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.Today, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("امروز", fontWeight = FontWeight.Bold)
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = onDismiss) {
+                            Text("انصراف")
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Button(
+                            onClick = {
+                                val millis = PersianDateHelper.toMillis(selectedYear, selectedMonth, selectedDay)
+                                onDateSelected(millis)
+                            },
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("تأیید", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
@@ -1070,7 +1472,7 @@ private fun WheelPickerColumn(
     label: String,
     value: Int,
     range: IntRange,
-    displayTransform: (Int) -> String = { PersianNumberFormatter.toPersianDigits(it) },
+    displayTransform: (Int) -> String = { PersianNumberFormatter.formatNumber(it, useCommas = false) },
     onValueChange: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1253,13 +1655,15 @@ fun EmptyStateCard(
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline,
-                textAlign = TextAlign.Center
-            )
+            if (description.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }
@@ -1271,6 +1675,7 @@ fun CategoryPieChart(
     currency: AppCurrency,
     modifier: Modifier = Modifier
 ) {
+    val useEn = currency.isEnglishDigits || LocalUseEnglishDigits.current || PersianNumberFormatter.globalUseEnglishDigits
     if (items.isEmpty() || totalAmount <= 0L) {
         EmptyStateCard(
             title = "اطلاعاتی برای نمایش نمودار وجود ندارد",
@@ -1310,12 +1715,22 @@ fun CategoryPieChart(
                     }
                 }
             }
-            Text(
-                text = PersianNumberFormatter.toPersianDigits(items.size) + "\nدسته",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "${PersianNumberFormatter.formatNumber(items.size, useCommas = false, isEnglishDigits = useEn)} دسته",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = PersianNumberFormatter.formatNumber(totalAmount, useCommas = true, isEnglishDigits = useEn),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
 
         Spacer(modifier = Modifier.width(16.dp))
@@ -1346,7 +1761,7 @@ fun CategoryPieChart(
                         modifier = Modifier.weight(1f)
                     )
                     Text(
-                        text = PersianNumberFormatter.formatPercent(percent, currency.isEnglishDigits),
+                        text = "${PersianNumberFormatter.formatNumber(amount, useCommas = true, isEnglishDigits = useEn)} (${PersianNumberFormatter.formatPercent(percent, useEn)})",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.outline
@@ -1406,3 +1821,182 @@ fun FeatureToggleCard(
         }
     }
 }
+
+@Composable
+fun GraphicalFormDialog(
+    title: String,
+    icon: ImageVector,
+    accentColor: Color = MaterialTheme.colorScheme.primary,
+    confirmText: String = "ذخیره",
+    dismissText: String = "انصراف",
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    confirmEnabled: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        var isDialogVisible by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            isDialogVisible = true
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            AnimatedVisibility(
+                visible = isDialogVisible,
+                enter = scaleIn(
+                    initialScale = 0.92f,
+                    animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
+                ) + fadeIn(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)),
+                exit = scaleOut(
+                    targetScale = 0.94f,
+                    animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
+                ) + fadeOut(animationSpec = tween(durationMillis = 180))
+            ) {
+                GlassCard(
+                    shape = RoundedCornerShape(24.dp),
+                    isHighlighted = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 420.dp)
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                    // Graphical Header Banner
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        accentColor.copy(alpha = 0.22f),
+                                        accentColor.copy(alpha = 0.06f)
+                                    )
+                                )
+                            )
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(accentColor.copy(alpha = 0.2f))
+                                        .border(1.dp, accentColor.copy(alpha = 0.4f), RoundedCornerShape(12.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        tint = accentColor,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            IconButton(
+                                onClick = onDismiss,
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = dismissText,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = accentColor.copy(alpha = 0.18f))
+
+                    // Controlled-size scrollable form content
+                    Column(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        content = content
+                    )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
+
+                    // Compact Action Footer
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text(dismissText)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = onConfirm,
+                            enabled = confirmEnabled,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(confirmText, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+}
+
+@Composable
+fun GraphicalFormDialog(
+    onDismissRequest: () -> Unit,
+    title: String,
+    icon: ImageVector = Icons.Default.EditNote,
+    accentColor: Color = MaterialTheme.colorScheme.primary,
+    confirmText: String = "ذخیره",
+    dismissText: String = "انصراف",
+    confirmEnabled: Boolean = true,
+    onConfirm: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    GraphicalFormDialog(
+        title = title,
+        icon = icon,
+        accentColor = accentColor,
+        confirmText = confirmText,
+        dismissText = dismissText,
+        confirmEnabled = confirmEnabled,
+        onDismiss = onDismissRequest,
+        onConfirm = onConfirm,
+        content = content
+    )
+}
+
+

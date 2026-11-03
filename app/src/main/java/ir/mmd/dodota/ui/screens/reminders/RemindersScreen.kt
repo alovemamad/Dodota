@@ -32,7 +32,9 @@ import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
 import ir.mmd.dodota.ui.components.*
 import ir.mmd.dodota.ui.theme.IncomeGreen
+import androidx.compose.ui.platform.testTag
 import ir.mmd.dodota.util.AlarmHelper
+import ir.mmd.dodota.util.AlarmSoundManager
 import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
@@ -46,6 +48,7 @@ fun RemindersScreen(
 ) {
     val remindersFlow = remember { repository.allReminders }
     val reminders by remindersFlow.collectAsState(initial = emptyList())
+    val activeAlarm by AlarmSoundManager.activeAlarmState.collectAsState()
     var selectedTypeFilter by remember { mutableStateOf<ReminderTargetType?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
     var reminderToEdit by remember { mutableStateOf<ReminderEntity?>(null) }
@@ -77,6 +80,7 @@ fun RemindersScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
                 title = "مرکز یادآورها و آلارم سررسید",
@@ -103,35 +107,55 @@ fun RemindersScreen(
             contentPadding = PaddingValues(top = 16.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Alarm banner info
-            item {
-                GlassCard(
-                    shape = RoundedCornerShape(20.dp),
-                    borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
+            // Active Ringing Alarm Quick-Dismiss Banner
+            if (activeAlarm != null) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("active_alarm_banner")
                     ) {
-                        Icon(
-                            Icons.Default.AlarmOn,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(30.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                "مرکز یکپارچه یادآور چک، قسط و بدهی",
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.titleSmall
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.NotificationsActive,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(28.dp)
                             )
-                            Text(
-                                "یادآورهایی که در بخش بدهی‌ها، اقساط، تراکنش‌های دوره‌ای یا چک‌ها فعال کرده‌اید در اینجا جمع شده و سر ساعت زنگ می‌زنند.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "در حال پخش زنگ هشدار!",
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Text(
+                                    activeAlarm!!.title,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f),
+                                    maxLines = 1
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Button(
+                                onClick = { AlarmSoundManager.stopAlarm(context, activeAlarm?.notifId) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError
+                                ),
+                                modifier = Modifier.testTag("banner_stop_alarm_button")
+                            ) {
+                                Icon(Icons.Default.AlarmOff, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("قطع زنگ")
+                            }
                         }
                     }
                 }
@@ -141,8 +165,8 @@ fun RemindersScreen(
             item {
                 DodotaExpandableSelector(
                     label = "فیلتر دسته‌بندی یادآورها",
-                    selectedTitle = selectedTypeFilter?.title ?: "همه یادآورها (چک، قسط، بدهی و دوره‌ای)",
-                    selectedSubtitle = "${PersianNumberFormatter.toPersianDigits(filteredReminders.size)} یادآور ثبت‌شده",
+                    selectedTitle = selectedTypeFilter?.title ?: "همه یادآورها (چک، قسط و بدهی)",
+                    selectedSubtitle = "${PersianNumberFormatter.formatDigits(filteredReminders.size, userPreferences.currency)} یادآور ثبت‌شده",
                     leadingIcon = {
                         Icon(
                             Icons.Default.FilterList,
@@ -163,7 +187,7 @@ fun RemindersScreen(
                     ) {
                         Text("همه یادآورها", modifier = Modifier.padding(10.dp), fontWeight = FontWeight.Bold)
                     }
-                    ReminderTargetType.values().forEach { type ->
+                    ReminderTargetType.values().filter { it != ReminderTargetType.RECURRING }.forEach { type ->
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = if (selectedTypeFilter == type) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
@@ -184,7 +208,7 @@ fun RemindersScreen(
                 item {
                     EmptyStateCard(
                         title = "یادآوری در این بخش وجود ندارد",
-                        description = "می‌توانید برای موعد چک‌ها، پرداخت اقساط وام، بدهی‌ها و قبوض (حتی برای چند روز قبل از سررسید) ساعت دقیق آلارم تنظیم کنید.",
+                        description = "",
                         icon = Icons.Outlined.Notifications
                     )
                 }
@@ -192,6 +216,7 @@ fun RemindersScreen(
                 items(filteredReminders, key = { it.id }) { reminder ->
                     GlassCard(
                         shape = RoundedCornerShape(20.dp),
+                        elevation = 4.dp,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -216,20 +241,19 @@ fun RemindersScreen(
                                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                         )
                                     }
-                                    if (reminder.reminderOffsetDays > 0) {
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = IncomeGreen.copy(alpha = 0.15f)
-                                        ) {
-                                            Text(
-                                                text = "${PersianNumberFormatter.toPersianDigits(reminder.reminderOffsetDays)} روز قبل از موعد",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = IncomeGreen,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = IncomeGreen.copy(alpha = 0.15f)
+                                    ) {
+                                        Text(
+                                            text = if (reminder.reminderOffsetDays == 0) "همان روز سررسید"
+                                            else "${PersianNumberFormatter.formatDigits(reminder.reminderOffsetDays, userPreferences.currency)} روز قبل از سررسید",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = IncomeGreen,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
@@ -248,8 +272,9 @@ fun RemindersScreen(
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 val cal = Calendar.getInstance().apply { timeInMillis = reminder.dueDateTimeMillis }
-                                val timeStr = PersianNumberFormatter.toPersianDigits(
-                                    String.format("%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
+                                val timeStr = PersianNumberFormatter.formatDigits(
+                                    String.format("%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE)),
+                                    userPreferences.currency
                                 )
                                 Text(
                                     text = "زمان زنگ هشدار: ${PersianDateHelper.formatToPersianDate(reminder.dueDateTimeMillis)} • ساعت $timeStr",
@@ -399,100 +424,86 @@ fun AddReminderDialog(
     var selectedMinute by remember { mutableIntStateOf(defaultCal.get(Calendar.MINUTE)) }
     var showDatePicker by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    GraphicalFormDialog(
         onDismissRequest = onDismiss,
-        title = { Text("تنظیم یادآور و آلارم جدید", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Collapsible Type selector
-                DodotaExpandableSelector(
-                    label = "نوع یادآور",
-                    selectedTitle = selectedType.title
-                ) { closeSelector ->
-                    ReminderTargetType.values().forEach { type ->
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (selectedType == type) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    selectedType = type
-                                    closeSelector()
-                                }
-                        ) {
-                            Text(type.title, modifier = Modifier.padding(10.dp), fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("عنوان یادآور (مثال: چک صیادی، قسط وام)") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = desc,
-                    onValueChange = { desc = it },
-                    label = { Text("توضیحات (مبلغ یا نام شخص)") },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedButton(
-                    onClick = { showDatePicker = true },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("تاریخ سررسید اصلی: ${PersianDateHelper.formatToPersianDate(dueDateMillis)}")
-                }
-
-                ReminderConfigSection(
-                    isEnabled = true,
-                    onEnabledChange = {},
+        title = "تنظیم یادآور جدید",
+        icon = Icons.Default.AlarmAdd,
+        confirmText = "ثبت و فعال‌سازی",
+        onConfirm = {
+            if (title.isNotBlank()) {
+                val triggerMillis = AlarmHelper.computeSmartTriggerMillis(
+                    dueDateMillis = dueDateMillis,
                     offsetDays = offsetDays,
-                    onOffsetDaysChange = { offsetDays = it },
-                    selectedHour = selectedHour,
-                    onHourChange = { selectedHour = it },
-                    selectedMinute = selectedMinute,
-                    onMinuteChange = { selectedMinute = it },
-                    title = "زمان و ساعت دقیق پخش آلارم"
+                    hour = selectedHour,
+                    minute = selectedMinute
                 )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (title.isNotBlank()) {
-                        val triggerMillis = AlarmHelper.computeSmartTriggerMillis(
-                            dueDateMillis = dueDateMillis,
-                            offsetDays = offsetDays,
-                            hour = selectedHour,
-                            minute = selectedMinute
-                        )
-                        onSave(title, desc, selectedType, triggerMillis, offsetDays)
-                    }
-                }
-            ) {
-                Text("ثبت و فعال‌سازی آلارم")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("انصراف")
+                onSave(title, desc, selectedType, triggerMillis, offsetDays)
             }
         }
-    )
+    ) {
+        DodotaExpandableSelector(
+            label = "نوع یادآور",
+            selectedTitle = selectedType.title
+        ) { closeSelector ->
+            ReminderTargetType.values().filter { it != ReminderTargetType.RECURRING }.forEach { type ->
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (selectedType == type) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            selectedType = type
+                            closeSelector()
+                        }
+                ) {
+                    Text(type.title, modifier = Modifier.padding(10.dp), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        DodotaTextField(
+            value = title,
+            onValueChange = { title = it },
+            label = "عنوان یادآور",
+            leadingIcon = Icons.Outlined.Notifications,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        DodotaTextField(
+            value = desc,
+            onValueChange = { desc = it },
+            label = "توضیحات",
+            leadingIcon = Icons.Default.Notes,
+            singleLine = false,
+            minLines = 2,
+            maxLines = 4,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedButton(
+            onClick = { showDatePicker = true },
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("تاریخ سررسید: ${PersianDateHelper.formatToPersianDate(dueDateMillis)}")
+        }
+
+        ReminderConfigSection(
+            isEnabled = true,
+            onEnabledChange = {},
+            offsetDays = offsetDays,
+            onOffsetDaysChange = { offsetDays = it },
+            selectedHour = selectedHour,
+            onHourChange = { selectedHour = it },
+            selectedMinute = selectedMinute,
+            onMinuteChange = { selectedMinute = it },
+            title = "زمان و ساعت پخش آلارم",
+            dueDateMillis = dueDateMillis,
+            onDueDateChange = { dueDateMillis = it }
+        )
+    }
 
     if (showDatePicker) {
         PersianDatePickerDialog(
@@ -529,99 +540,86 @@ fun EditReminderDialog(
     var selectedMinute by remember { mutableIntStateOf(initialCal.get(Calendar.MINUTE)) }
     var showDatePicker by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    GraphicalFormDialog(
         onDismissRequest = onDismiss,
-        title = { Text("ویرایش یادآور و ساعت آلارم", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                DodotaExpandableSelector(
-                    label = "نوع یادآور",
-                    selectedTitle = selectedType.title
-                ) { closeSelector ->
-                    ReminderTargetType.values().forEach { type ->
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (selectedType == type) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    selectedType = type
-                                    closeSelector()
-                                }
-                        ) {
-                            Text(type.title, modifier = Modifier.padding(10.dp), fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("عنوان یادآور") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = desc,
-                    onValueChange = { desc = it },
-                    label = { Text("توضیحات (مبلغ یا نام شخص)") },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedButton(
-                    onClick = { showDatePicker = true },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("تاریخ سررسید اصلی: ${PersianDateHelper.formatToPersianDate(dueDateMillis)}")
-                }
-
-                ReminderConfigSection(
-                    isEnabled = true,
-                    onEnabledChange = {},
+        title = "ویرایش یادآور",
+        icon = Icons.Default.EditNotifications,
+        confirmText = "ذخیره تغییرات",
+        onConfirm = {
+            if (title.isNotBlank()) {
+                val triggerMillis = AlarmHelper.computeSmartTriggerMillis(
+                    dueDateMillis = dueDateMillis,
                     offsetDays = offsetDays,
-                    onOffsetDaysChange = { offsetDays = it },
-                    selectedHour = selectedHour,
-                    onHourChange = { selectedHour = it },
-                    selectedMinute = selectedMinute,
-                    onMinuteChange = { selectedMinute = it },
-                    title = "زمان و ساعت دقیق پخش آلارم"
+                    hour = selectedHour,
+                    minute = selectedMinute
                 )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (title.isNotBlank()) {
-                        val triggerMillis = AlarmHelper.computeSmartTriggerMillis(
-                            dueDateMillis = dueDateMillis,
-                            offsetDays = offsetDays,
-                            hour = selectedHour,
-                            minute = selectedMinute
-                        )
-                        onSave(title, desc, selectedType, triggerMillis, offsetDays)
-                    }
-                }
-            ) {
-                Text("ذخیره تغییرات")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("انصراف")
+                onSave(title, desc, selectedType, triggerMillis, offsetDays)
             }
         }
-    )
+    ) {
+        DodotaExpandableSelector(
+            label = "نوع یادآور",
+            selectedTitle = selectedType.title
+        ) { closeSelector ->
+            ReminderTargetType.values().filter { it != ReminderTargetType.RECURRING }.forEach { type ->
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (selectedType == type) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            selectedType = type
+                            closeSelector()
+                        }
+                ) {
+                    Text(type.title, modifier = Modifier.padding(10.dp), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        DodotaTextField(
+            value = title,
+            onValueChange = { title = it },
+            label = "عنوان یادآور",
+            leadingIcon = Icons.Outlined.Notifications,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        DodotaTextField(
+            value = desc,
+            onValueChange = { desc = it },
+            label = "توضیحات",
+            leadingIcon = Icons.Default.Notes,
+            singleLine = false,
+            minLines = 2,
+            maxLines = 4,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedButton(
+            onClick = { showDatePicker = true },
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("تاریخ سررسید: ${PersianDateHelper.formatToPersianDate(dueDateMillis)}")
+        }
+
+        ReminderConfigSection(
+            isEnabled = true,
+            onEnabledChange = {},
+            offsetDays = offsetDays,
+            onOffsetDaysChange = { offsetDays = it },
+            selectedHour = selectedHour,
+            onHourChange = { selectedHour = it },
+            selectedMinute = selectedMinute,
+            onMinuteChange = { selectedMinute = it },
+            title = "زمان و ساعت پخش آلارم",
+            dueDateMillis = dueDateMillis,
+            onDueDateChange = { dueDateMillis = it }
+        )
+    }
 
     if (showDatePicker) {
         PersianDatePickerDialog(

@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import ir.mmd.dodota.ui.components.DodotaTopBar
+import ir.mmd.dodota.util.PersianNumberFormatter
 import ir.mmd.dodota.util.TelegramHelper
 
 @Composable
@@ -26,6 +27,7 @@ fun AboutScreen(
     val context = LocalContext.current
 
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
                 title = "درباره «دودوتا»",
@@ -39,13 +41,14 @@ fun AboutScreen(
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 40.dp),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 56.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             item {
                 Card(
                     shape = RoundedCornerShape(24.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -70,7 +73,7 @@ fun AboutScreen(
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "نسخه ۱.۰.۰ • توسعه‌دهنده: Mmd",
+                            text = PersianNumberFormatter.formatDigits("نسخه 1.0.0 • توسعه‌دهنده: Mmd"),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -83,6 +86,7 @@ fun AboutScreen(
             item {
                 Card(
                     shape = RoundedCornerShape(20.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -118,6 +122,7 @@ fun AboutScreen(
             item {
                 Card(
                     shape = RoundedCornerShape(20.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -126,7 +131,7 @@ fun AboutScreen(
                             Icon(Icons.Outlined.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "تضمین ۱۰۰٪ آفلاین و امنیت اطلاعات",
+                                text = PersianNumberFormatter.formatDigits("تضمین 100٪ آفلاین و امنیت اطلاعات"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )

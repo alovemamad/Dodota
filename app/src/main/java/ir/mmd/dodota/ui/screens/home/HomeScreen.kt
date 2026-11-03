@@ -39,15 +39,12 @@ import ir.mmd.dodota.util.PersianNumberFormatter
 fun HomeScreen(
     userPreferences: UserPreferences,
     accounts: List<AccountEntity>,
-    recentTransactions: List<TransactionEntity>,
     allTransactions: List<TransactionEntity>,
     categories: List<CategoryEntity>,
     upcomingInstallments: List<InstallmentEntity>,
     activeReminders: List<ReminderEntity>,
     netWorth: Long,
     onNavigateToAddTransaction: (type: String) -> Unit,
-    onNavigateToTransactionDetail: (id: Long) -> Unit,
-    onNavigateToTransactions: () -> Unit,
     onNavigateToAccounts: () -> Unit,
     onNavigateToCardsManager: () -> Unit = {},
     onNavigateToInstallments: () -> Unit,
@@ -57,9 +54,11 @@ fun HomeScreen(
     onNavigateToAssets: () -> Unit,
     onNavigateToCalendar: () -> Unit,
     onNavigateToChecklists: () -> Unit,
-    onNavigateToRecurring: () -> Unit = {}
+    onNavigateToChecks: () -> Unit = {},
+    onNavigateToBahesab: () -> Unit = {},
+    onToggleBalanceVisibility: () -> Unit = {}
 ) {
-    var isBalanceVisible by remember { mutableStateOf(true) }
+    val isBalanceVisible = !userPreferences.isBalanceHidden
     val activeAccounts = remember(accounts) { accounts.filter { it.isActive } }
     val totalBalance = activeAccounts.sumOf { it.balance }
     val glassStyle = LocalDodotaGlassStyle.current
@@ -80,21 +79,26 @@ fun HomeScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Ambient VIP Red / Theme Glow in Top Background
+        // Soft ambient radial theme glow (no harsh rectangular lines or halos)
         if (glassStyle.isGlassEnabled) {
-            Box(
+            Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(260.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                glassStyle.accentGlowColor.copy(alpha = 0.22f),
-                                Color.Transparent
-                            )
-                        )
-                    )
-            )
+                    .height(300.dp)
+            ) {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            glassStyle.accentGlowColor.copy(alpha = 0.14f),
+                            Color.Transparent
+                        ),
+                        center = Offset(size.width * 0.5f, 0f),
+                        radius = size.width * 0.75f
+                    ),
+                    center = Offset(size.width * 0.5f, 0f),
+                    radius = size.width * 0.75f
+                )
+            }
         }
 
         LazyColumn(
@@ -270,7 +274,7 @@ fun HomeScreen(
                                         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
                                     ) {
                                         Text(
-                                            text = "${PersianNumberFormatter.toPersianDigits(activeAccounts.size)} حساب فعال",
+                                            text = "${PersianNumberFormatter.formatDigits(activeAccounts.size)} حساب فعال",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
                                             color = Color.White,
@@ -278,7 +282,7 @@ fun HomeScreen(
                                         )
                                     }
                                     IconButton(
-                                        onClick = { isBalanceVisible = !isBalanceVisible },
+                                        onClick = onToggleBalanceVisibility,
                                         modifier = Modifier
                                             .size(34.dp)
                                             .clip(CircleShape)
@@ -443,35 +447,32 @@ fun HomeScreen(
                 }
             }
 
-            // 3. Quick Action Glass Buttons (Cards Manager replaces Transfer per Items 14 & 15)
+            // 3. Quick Action Glass Buttons (3 balanced cards: ثبت درآمد، ثبت هزینه، کارت‌ها)
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     QuickActionButton(
                         title = "ثبت درآمد",
                         icon = Icons.Default.AddCard,
                         color = IncomeGreen,
-                        onClick = { onNavigateToAddTransaction("INCOME") }
+                        onClick = { onNavigateToAddTransaction("INCOME") },
+                        modifier = Modifier.weight(1f)
                     )
                     QuickActionButton(
                         title = "ثبت هزینه",
                         icon = Icons.Default.LocalMall,
                         color = ExpenseRed,
-                        onClick = { onNavigateToAddTransaction("EXPENSE") }
+                        onClick = { onNavigateToAddTransaction("EXPENSE") },
+                        modifier = Modifier.weight(1f)
                     )
                     QuickActionButton(
-                        title = "کارت‌های من",
+                        title = "کارت‌ها",
                         icon = Icons.Default.CreditCard,
-                        color = TransferBlue,
-                        onClick = onNavigateToCardsManager
-                    )
-                    QuickActionButton(
-                        title = "تقویم مالی",
-                        icon = Icons.Default.CalendarMonth,
-                        color = WarningAmber,
-                        onClick = onNavigateToCalendar
+                        color = MaterialTheme.colorScheme.primary,
+                        onClick = onNavigateToCardsManager,
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
@@ -504,7 +505,7 @@ fun HomeScreen(
                         ) {
                             Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text("هنوز حسابی ثبت نشده است. برای افزودن حساب ضربه بزنید.")
+                            Text("افزودن حساب جدید")
                         }
                     }
                 } else {
@@ -513,7 +514,13 @@ fun HomeScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         items(activeAccounts) { account ->
-                            val accColor = try {
+                            val resolvedBank = remember(account.bankName, account.cardNumber) {
+                                ir.mmd.dodota.ui.screens.accounts.IranianBanksCatalog.resolveBank(
+                                    account.bankName,
+                                    account.cardNumber
+                                )
+                            }
+                            val accColor = resolvedBank?.primaryColor ?: try {
                                 Color(android.graphics.Color.parseColor(account.colorHex))
                             } catch (_: Exception) {
                                 MaterialTheme.colorScheme.primary
@@ -531,11 +538,18 @@ fun HomeScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        CategoryIconView(
-                                            iconName = account.iconName,
-                                            colorHex = account.colorHex,
-                                            size = 38.dp
-                                        )
+                                        if (resolvedBank != null) {
+                                            ir.mmd.dodota.ui.screens.accounts.IranianBankLogoBadge(
+                                                bankInfo = resolvedBank,
+                                                size = 38.dp
+                                            )
+                                        } else {
+                                            CategoryIconView(
+                                                iconName = account.iconName,
+                                                colorHex = account.colorHex,
+                                                size = 38.dp
+                                            )
+                                        }
                                         Text(
                                             text = account.type.title,
                                             style = MaterialTheme.typography.labelSmall,
@@ -574,64 +588,94 @@ fun HomeScreen(
                 }
             }
 
-            // 5. Financial Tools Grid (Collapsible Section without subtitle per Item 29, renamed items per 31, 32, 33)
+            // 5. Financial Tools Grid (Item 28: Recent Transactions removed from Home; Item 29: Collapsible Section without subtitle)
             item {
+                val primaryTone = MaterialTheme.colorScheme.primary
+                val secondaryTone = MaterialTheme.colorScheme.secondary
                 DodotaExpandableSection(
                     title = "ابزارهای پیشرفته مالی",
                     subtitle = null,
                     icon = Icons.Default.DashboardCustomize,
                     initiallyExpanded = true
                 ) {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        item {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             ToolChip(
                                 title = "اقساط",
                                 icon = Icons.Default.EventRepeat,
-                                color = Color(0xFF8B5CF6),
-                                onClick = onNavigateToInstallments
+                                color = primaryTone,
+                                onClick = onNavigateToInstallments,
+                                modifier = Modifier.weight(1f)
+                            )
+                            ToolChip(
+                                title = "چک‌ها",
+                                icon = Icons.Default.FactCheck,
+                                color = secondaryTone,
+                                onClick = onNavigateToChecks,
+                                modifier = Modifier.weight(1f)
                             )
                         }
-                        item {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             ToolChip(
                                 title = "اهداف",
                                 icon = Icons.Default.Savings,
-                                color = Color(0xFF06B6D4),
-                                onClick = onNavigateToGoals
+                                color = primaryTone,
+                                onClick = onNavigateToGoals,
+                                modifier = Modifier.weight(1f)
                             )
-                        }
-                        item {
                             ToolChip(
                                 title = "چک‌لیست",
                                 icon = Icons.Default.Checklist,
-                                color = Color(0xFF14B8A6),
-                                onClick = onNavigateToChecklists
+                                color = secondaryTone,
+                                onClick = onNavigateToChecklists,
+                                modifier = Modifier.weight(1f)
                             )
                         }
-                        item {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             ToolChip(
                                 title = "بودجه‌بندی",
                                 icon = Icons.Default.PieChart,
-                                color = Color(0xFF10B981),
-                                onClick = onNavigateToBudgets
+                                color = primaryTone,
+                                onClick = onNavigateToBudgets,
+                                modifier = Modifier.weight(1f)
                             )
-                        }
-                        item {
                             ToolChip(
                                 title = "دارایی و ثروت",
                                 icon = Icons.Default.Diamond,
-                                color = Color(0xFFF59E0B),
-                                onClick = onNavigateToAssets
+                                color = secondaryTone,
+                                onClick = onNavigateToAssets,
+                                modifier = Modifier.weight(1f)
                             )
                         }
-                        item {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             ToolChip(
                                 title = "یادآورها",
                                 icon = Icons.Default.NotificationsActive,
-                                color = Color(0xFFEC4899),
-                                onClick = onNavigateToReminders
+                                color = primaryTone,
+                                onClick = onNavigateToReminders,
+                                modifier = Modifier.weight(1f)
+                            )
+                            ToolChip(
+                                title = "باحساب",
+                                icon = Icons.Default.Calculate,
+                                color = secondaryTone,
+                                onClick = onNavigateToBahesab,
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
@@ -646,40 +690,57 @@ private fun QuickActionButton(
     title: String,
     icon: ImageVector,
     color: Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable { onClick() }
+    val glassStyle = LocalDodotaGlassStyle.current
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = glassStyle.cardContainerColor,
+        border = BorderStroke(1.dp, color.copy(alpha = 0.42f)),
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .clickable { onClick() }
     ) {
-        Box(
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
             modifier = Modifier
-                .size(58.dp)
-                .clip(RoundedCornerShape(18.dp))
+                .fillMaxWidth()
                 .background(
-                    Brush.linearGradient(
+                    Brush.verticalGradient(
                         colors = listOf(
-                            color.copy(alpha = 0.25f),
-                            color.copy(alpha = 0.08f)
+                            color.copy(alpha = 0.16f),
+                            Color.Transparent
                         )
                     )
                 )
-                .border(1.dp, color.copy(alpha = 0.45f), RoundedCornerShape(18.dp)),
-            contentAlignment = Alignment.Center
+                .padding(vertical = 14.dp, horizontal = 8.dp)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = color,
-                modifier = Modifier.size(26.dp)
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(color.copy(alpha = 0.20f))
+                    .border(1.dp, color.copy(alpha = 0.45f), RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = color,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
             )
         }
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold
-        )
     }
 }
 
@@ -688,14 +749,17 @@ private fun ToolChip(
     title: String,
     icon: ImageVector,
     color: Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val glassStyle = LocalDodotaGlassStyle.current
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = glassStyle.cardContainerColor,
         border = BorderStroke(1.dp, color.copy(alpha = 0.35f)),
-        modifier = Modifier.clickable { onClick() }
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { onClick() }
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -719,7 +783,9 @@ private fun ToolChip(
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }

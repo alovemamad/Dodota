@@ -6,12 +6,19 @@ import ir.mmd.dodota.util.NotificationHelper
 import ir.mmd.dodota.util.ReminderAlarmReceiver
 import ir.mmd.dodota.worker.NightlyBackupWorker
 
-class DodotaApplication : Application() {
+import androidx.work.Configuration
+
+class DodotaApplication : Application(), Configuration.Provider {
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder().build()
+
     override fun onCreate() {
         super.onCreate()
         NotificationHelper.createNotificationChannels(this)
         ReminderAlarmReceiver.ensureAlarmChannel(this)
         AlarmHelper.rescheduleAllActiveReminders(this)
-        NightlyBackupWorker.schedule(this)
+        try {
+            NightlyBackupWorker.schedule(this)
+        } catch (_: Throwable) {}
     }
 }

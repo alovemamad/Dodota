@@ -16,7 +16,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.preferences.UserPreferencesRepository
+import ir.mmd.dodota.ui.components.DodotaTextField
 import ir.mmd.dodota.ui.components.DodotaTopBar
+import ir.mmd.dodota.ui.components.GlassCard
 import kotlinx.coroutines.launch
 
 @Composable
@@ -31,6 +33,7 @@ fun RecoveryScreen(
     val context = LocalContext.current
 
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
                 title = "بازیابی رمز عبور",
@@ -42,41 +45,52 @@ fun RecoveryScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .imePadding()
+                .navigationBarsPadding()
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    imageVector = Icons.Default.Key,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(56.dp)
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "ورود با کد بازیابی اضطراری",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "کد بازیابی که در زمان راه‌اندازی برنامه دریافت کردید را وارد کنید (مانند: DODOTA-XXXX-XXXX).",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.outline,
-                    textAlign = TextAlign.Center
-                )
+            GlassCard(
+                shape = RoundedCornerShape(24.dp),
+                elevation = 6.dp,
+                isHighlighted = true,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Key,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(56.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "ورود با کد بازیابی اضطراری",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "کد بازیابی که در زمان راه‌اندازی برنامه دریافت کردید را وارد کنید (مانند: DODOTA-XXXX-XXXX).",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.outline,
+                        textAlign = TextAlign.Center
+                    )
 
-                Spacer(modifier = Modifier.height(28.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                OutlinedTextField(
-                    value = enteredCode,
-                    onValueChange = { enteredCode = it.uppercase() },
-                    label = { Text("کد بازیابی") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    DodotaTextField(
+                        value = enteredCode,
+                        onValueChange = { enteredCode = it.uppercase() },
+                        label = "کد بازیابی",
+                        leadingIcon = Icons.Default.Key,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
             Button(

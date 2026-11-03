@@ -27,9 +27,11 @@ import androidx.core.content.FileProvider
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.preferences.UserPreferencesRepository
 import ir.mmd.dodota.data.repository.BackupRepository
+import ir.mmd.dodota.ui.components.DodotaTextField
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.FeatureToggleCard
 import ir.mmd.dodota.util.PersianDateHelper
+import ir.mmd.dodota.util.PersianNumberFormatter
 import ir.mmd.dodota.worker.NightlyBackupWorker
 import kotlinx.coroutines.launch
 import java.io.File
@@ -81,6 +83,7 @@ fun BackupRestoreScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
                 title = "پشتیبان‌گیری فایل JSON",
@@ -94,13 +97,14 @@ fun BackupRestoreScreen(
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 40.dp),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 56.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Security Card
             item {
                 Card(
                     shape = RoundedCornerShape(20.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -139,7 +143,7 @@ fun BackupRestoreScreen(
                     title = "پشتیبان‌گیری خودکار شبانه (WorkManager)",
                     description = if (userPreferences.lastBackupMillis > 0)
                         "آخرین ذخیره خودکار: ${PersianDateHelper.formatToPersianDate(userPreferences.lastBackupMillis)}"
-                    else "پشتیبان‌گیری منظم هر شب ساعت ۳ بامداد در پوشه MyFinanceBackup",
+                    else PersianNumberFormatter.formatDigits("پشتیبان‌گیری منظم هر شب ساعت 3 بامداد در پوشه MyFinanceBackup", userPreferences.currency),
                     isChecked = userPreferences.isWeeklyBackupEnabled,
                     onCheckedChange = { enabled ->
                         coroutineScope.launch {
@@ -276,7 +280,7 @@ fun BackupRestoreScreen(
             // Existing Backup Files in MyFinanceBackup folder
             item {
                 Text(
-                    text = "فایل‌های موجود در پوشه MyFinanceBackup (${backupFiles.size})",
+                    text = "فایل‌های موجود در پوشه MyFinanceBackup (${PersianNumberFormatter.formatDigits(backupFiles.size, userPreferences.currency)})",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(top = 8.dp)
@@ -314,12 +318,15 @@ fun BackupRestoreScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = file.name,
+                                    text = PersianNumberFormatter.formatDigits(file.name, userPreferences.currency),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
-                                val sizeKb = (file.length() / 1024.0).let { String.format("%.1f کیلوبایت", it) }
+                                val sizeKb = PersianNumberFormatter.formatDigits(
+                                    (file.length() / 1024.0).let { String.format(java.util.Locale.US, "%.1f کیلوبایت", it) },
+                                    userPreferences.currency
+                                )
                                 Text(
                                     text = "تاریخ: ${PersianDateHelper.formatToPersianDate(file.lastModified())} | حجم: $sizeKb",
                                     style = MaterialTheme.typography.labelSmall,
@@ -424,12 +431,14 @@ fun BackupRestoreScreen(
                         style = MaterialTheme.typography.bodySmall
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
+                    DodotaTextField(
                         value = restoreJsonText,
                         onValueChange = { restoreJsonText = it },
+                        label = "متن JSON پشتیبان",
+                        leadingIcon = Icons.Default.ContentPaste,
+                        singleLine = false,
                         minLines = 4,
                         maxLines = 8,
-                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

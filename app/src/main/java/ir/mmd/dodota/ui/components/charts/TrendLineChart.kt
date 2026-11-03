@@ -230,7 +230,7 @@ fun TrendLineChart(
                 if (index % step == 0 || index == points.lastIndex) {
                     val isSelected = selectedIndex == index
                     Text(
-                        text = point.label,
+                        text = PersianNumberFormatter.formatDigits(point.label, currency),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Normal,
                         color = if (isSelected) lineColor else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -262,7 +262,7 @@ fun TrendLineChart(
                     ) {
                         Column {
                             Text(
-                                text = "نقطه انتخابی: ${pt.label}",
+                                text = "نقطه انتخابی: ${PersianNumberFormatter.formatDigits(pt.label, currency)}",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodySmall
                             )

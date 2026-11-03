@@ -43,6 +43,7 @@ fun AssetsScreen(
     val totalAssetsValue = assets.sumOf { it.estimatedValue }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
                 title = "دارایی‌ها و ارزش خالص",
@@ -73,6 +74,7 @@ fun AssetsScreen(
             item {
                 Card(
                     shape = RoundedCornerShape(22.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -111,6 +113,7 @@ fun AssetsScreen(
                 items(assets, key = { it.id }) { asset ->
                     Card(
                         shape = RoundedCornerShape(18.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -262,18 +265,17 @@ fun AddAssetDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("ثبت دارایی جدید") },
+        title = { Text("ثبت دارایی جدید", fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                OutlinedTextField(
+                DodotaTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("نام دارایی (مثال: سکه تمام، پژو ۲۰۶)") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
+                    label = "نام دارایی (مثال: سکه تمام، پژو ${PersianNumberFormatter.formatDigits("206", currency)})",
+                    leadingIcon = Icons.Outlined.Savings,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -297,11 +299,14 @@ fun AddAssetDialog(
                     currency = currency,
                     label = "ارزش تخمینی روز"
                 )
-                OutlinedTextField(
+                DodotaTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("توضیحات (اختیاری)") },
-                    shape = RoundedCornerShape(12.dp),
+                    label = "توضیحات (اختیاری)",
+                    leadingIcon = Icons.Outlined.Edit,
+                    singleLine = false,
+                    minLines = 2,
+                    maxLines = 4,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -340,18 +345,17 @@ fun EditAssetDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("ویرایش دارایی") },
+        title = { Text("ویرایش دارایی", fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                OutlinedTextField(
+                DodotaTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("نام دارایی") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
+                    label = "نام دارایی",
+                    leadingIcon = Icons.Outlined.Savings,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -375,11 +379,14 @@ fun EditAssetDialog(
                     currency = currency,
                     label = "ارزش تخمینی روز"
                 )
-                OutlinedTextField(
+                DodotaTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("توضیحات (اختیاری)") },
-                    shape = RoundedCornerShape(12.dp),
+                    label = "توضیحات (اختیاری)",
+                    leadingIcon = Icons.Outlined.Edit,
+                    singleLine = false,
+                    minLines = 2,
+                    maxLines = 4,
                     modifier = Modifier.fillMaxWidth()
                 )
             }

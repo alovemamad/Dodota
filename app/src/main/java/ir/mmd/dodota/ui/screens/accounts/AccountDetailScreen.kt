@@ -49,7 +49,7 @@ fun AccountDetailScreen(
     val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
                 title = account?.name ?: "جزئیات حساب",
@@ -85,6 +85,7 @@ fun AccountDetailScreen(
                 item {
                     GlassCard(
                         shape = RoundedCornerShape(22.dp),
+                        elevation = 8.dp,
                         isHighlighted = true,
                         modifier = Modifier.fillMaxWidth()
                     ) {

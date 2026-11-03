@@ -148,7 +148,7 @@ data class ReminderBackupItem(
     val targetType: String,
     val targetId: Long? = null,
     val dueDateTimeMillis: Long,
-    val reminderOffsetDays: Int = 1,
+    val reminderOffsetDays: Int = 0,
     val isCompleted: Boolean = false,
     val isEnabled: Boolean = true
 )

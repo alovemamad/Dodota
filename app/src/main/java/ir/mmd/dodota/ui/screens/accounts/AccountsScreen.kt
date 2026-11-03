@@ -35,8 +35,10 @@ import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
 import ir.mmd.dodota.ui.components.CategoryIconView
 import ir.mmd.dodota.ui.components.DodotaDropdownField
+import ir.mmd.dodota.ui.components.DodotaTextField
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.GlassCard
+import ir.mmd.dodota.ui.components.GraphicalFormDialog
 import ir.mmd.dodota.ui.components.PersianAmountInput
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
@@ -100,6 +102,7 @@ fun AccountsScreen(
             item {
                 GlassCard(
                     shape = RoundedCornerShape(24.dp),
+                    elevation = 8.dp,
                     isHighlighted = true,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -171,8 +174,15 @@ fun AccountsScreen(
             }
 
             items(activeAccounts, key = { it.id }) { account ->
+                val resolvedBank = remember(account.bankName, account.cardNumber) {
+                    IranianBanksCatalog.resolveBank(account.bankName, account.cardNumber)
+                }
+                val cardBorder = resolvedBank?.accentColor?.copy(alpha = 0.45f) 
+                    ?: MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
                 GlassCard(
                     shape = RoundedCornerShape(20.dp),
+                    borderColor = cardBorder,
+                    elevation = 6.dp,
                     onClick = { onNavigateToDetail(account.id) },
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -182,11 +192,18 @@ fun AccountsScreen(
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        CategoryIconView(
-                            iconName = account.iconName,
-                            colorHex = account.colorHex,
-                            size = 48.dp
-                        )
+                        if (resolvedBank != null) {
+                            IranianBankLogoBadge(
+                                bankInfo = resolvedBank,
+                                size = 48.dp
+                            )
+                        } else {
+                            CategoryIconView(
+                                iconName = account.iconName,
+                                colorHex = account.colorHex,
+                                size = 48.dp
+                            )
+                        }
                         Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
@@ -204,7 +221,8 @@ fun AccountsScreen(
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = PersianNumberFormatter.formatDigits(
-                                        account.cardNumber.chunked(4).joinToString("-")
+                                        account.cardNumber.chunked(4).joinToString("-"),
+                                        userPreferences.currency
                                     ),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
@@ -366,6 +384,7 @@ private fun InternalAccountTransferDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.SwapHoriz, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
@@ -417,12 +436,11 @@ private fun InternalAccountTransferDialog(
                     errorMessage = errorText
                 )
 
-                OutlinedTextField(
+                DodotaTextField(
                     value = note,
                     onValueChange = { note = it },
-                    label = { Text("توضیحات انتقال داخلی") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
+                    label = "توضیحات انتقال داخلی",
+                    leadingIcon = Icons.Default.EditNote,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -459,99 +477,131 @@ fun AddAccountDialog(
     onSave: (name: String, type: AccountType, bank: String, balance: Long, color: String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
-    var bankName by remember { mutableStateOf("") }
+    var bankName by remember { mutableStateOf("بانک سپه") }
     var balanceText by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(AccountType.BANK_CARD) }
-    val colors = listOf("#10B981", "#3B82F6", "#8B5CF6", "#F59E0B", "#EF4444", "#06B6D4")
+    val colors = listOf("#475569", "#10B981", "#3B82F6", "#8B5CF6", "#F59E0B", "#EF4444", "#06B6D4")
     var selectedColor by remember { mutableStateOf(colors[0]) }
+    var showBankPicker by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    val selectedBankInfo = remember(bankName) {
+        IranianBanksCatalog.resolveBank(bankName)
+    }
+
+    GraphicalFormDialog(
         onDismissRequest = onDismiss,
-        title = { Text("افزودن حساب جدید", fontWeight = FontWeight.ExtraBold) },
-        text = {
-            Column(
+        title = "افزودن حساب جدید",
+        icon = Icons.Default.AccountBalanceWallet,
+        accentColor = MaterialTheme.colorScheme.primary,
+        confirmText = "ذخیره",
+        dismissText = "انصراف",
+        onConfirm = {
+            val finalName = name.trim().ifEmpty { bankName.trim().ifEmpty { "حساب بانکی" } }
+            val balance = PersianNumberFormatter.parseAmount(balanceText)
+            onSave(finalName, selectedType, bankName, balance, selectedColor)
+        }
+    ) {
+        // Graphical Bank Selector
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
+            border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .clickable { showBankPicker = true }
+        ) {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("نام حساب یا کارت") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = bankName,
-                    onValueChange = { bankName = it },
-                    label = { Text("نام بانک (مثال: ملی، ملت)") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text("نوع حساب:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(AccountType.values()) { type ->
-                        FilterChip(
-                            selected = selectedType == type,
-                            onClick = { selectedType = type },
-                            label = { Text(type.title) }
+                    IranianBankLogoBadge(bankInfo = selectedBankInfo, size = 38.dp)
+                    Column {
+                        Text(
+                            text = "انتخاب بانک",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = selectedBankInfo?.persianName ?: bankName.ifBlank { "انتخاب از پک بانک‌ها" },
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.ExtraBold
                         )
                     }
                 }
-
-                PersianAmountInput(
-                    value = balanceText,
-                    onValueChange = { balanceText = it },
-                    currency = currency,
-                    label = "موجودی اولیه"
-                )
-
-                Text("رنگ حساب:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(colors) { hex ->
-                        val c = Color(android.graphics.Color.parseColor(hex))
-                        val isSelected = selectedColor == hex
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(c)
-                                .border(
-                                    width = if (isSelected) 2.5.dp else 0.dp,
-                                    color = if (isSelected) MaterialTheme.colorScheme.onBackground else Color.Transparent,
-                                    shape = CircleShape
-                                )
-                                .clickable { selectedColor = hex }
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (name.isNotBlank()) {
-                        val balance = PersianNumberFormatter.parseAmount(balanceText)
-                        onSave(name, selectedType, bankName, balance, selectedColor)
-                    }
-                }
-            ) {
-                Text("ذخیره")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("انصراف")
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             }
         }
-    )
+
+        DodotaTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = "نام حساب یا کارت",
+            leadingIcon = Icons.Default.CreditCard,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Text("نوع حساب:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(AccountType.values()) { type ->
+                FilterChip(
+                    selected = selectedType == type,
+                    onClick = { selectedType = type },
+                    label = { Text(type.title) }
+                )
+            }
+        }
+
+        PersianAmountInput(
+            value = balanceText,
+            onValueChange = { balanceText = it },
+            currency = currency,
+            label = "موجودی اولیه"
+        )
+
+        Text("رنگ حساب:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(colors) { hex ->
+                val c = Color(android.graphics.Color.parseColor(hex))
+                val isSelected = selectedColor.equals(hex, ignoreCase = true)
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(c)
+                        .border(
+                            width = if (isSelected) 2.5.dp else 0.dp,
+                            color = if (isSelected) MaterialTheme.colorScheme.onBackground else Color.Transparent,
+                            shape = CircleShape
+                        )
+                        .clickable { selectedColor = hex }
+                )
+            }
+        }
+    }
+
+    if (showBankPicker) {
+        IranianBankPickerDialog(
+            selectedBankName = bankName,
+            onSelectBank = { chosen ->
+                bankName = chosen.persianName
+                selectedColor = chosen.primaryColorHex
+                if (name.isBlank()) name = chosen.persianName
+            },
+            onDismiss = { showBankPicker = false }
+        )
+    }
 }
 
 @Composable
@@ -565,94 +615,125 @@ fun EditAccountDialog(
     var bankName by remember { mutableStateOf(account.bankName) }
     var balanceText by remember { mutableStateOf(account.balance.toString()) }
     var selectedType by remember { mutableStateOf(account.type) }
-    val colors = listOf("#10B981", "#3B82F6", "#8B5CF6", "#F59E0B", "#EF4444", "#06B6D4")
+    val colors = listOf("#475569", "#10B981", "#3B82F6", "#8B5CF6", "#F59E0B", "#EF4444", "#06B6D4")
     var selectedColor by remember { mutableStateOf(account.colorHex) }
+    var showBankPicker by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    val selectedBankInfo = remember(bankName) {
+        IranianBanksCatalog.resolveBank(bankName)
+    }
+
+    GraphicalFormDialog(
         onDismissRequest = onDismiss,
-        title = { Text("ویرایش حساب", fontWeight = FontWeight.ExtraBold) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("نام حساب یا کارت") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = bankName,
-                    onValueChange = { bankName = it },
-                    label = { Text("نام بانک") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text("نوع حساب:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(AccountType.values()) { type ->
-                        FilterChip(
-                            selected = selectedType == type,
-                            onClick = { selectedType = type },
-                            label = { Text(type.title) }
-                        )
-                    }
-                }
-
-                PersianAmountInput(
-                    value = balanceText,
-                    onValueChange = { balanceText = it },
-                    currency = currency,
-                    label = "موجودی حساب"
-                )
-
-                Text("رنگ حساب:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(colors) { hex ->
-                        val c = Color(android.graphics.Color.parseColor(hex))
-                        val isSelected = selectedColor == hex
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(c)
-                                .border(
-                                    width = if (isSelected) 2.5.dp else 0.dp,
-                                    color = if (isSelected) MaterialTheme.colorScheme.onBackground else Color.Transparent,
-                                    shape = CircleShape
-                                )
-                                .clickable { selectedColor = hex }
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (name.isNotBlank()) {
-                        val balance = PersianNumberFormatter.parseAmount(balanceText)
-                        onSave(name, selectedType, bankName, balance, selectedColor)
-                    }
-                }
-            ) {
-                Text("بروزرسانی")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("انصراف")
+        title = "ویرایش حساب",
+        icon = Icons.Outlined.Edit,
+        accentColor = MaterialTheme.colorScheme.primary,
+        confirmText = "بروزرسانی",
+        dismissText = "انصراف",
+        onConfirm = {
+            if (name.isNotBlank()) {
+                val balance = PersianNumberFormatter.parseAmount(balanceText)
+                onSave(name, selectedType, bankName, balance, selectedColor)
             }
         }
-    )
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
+            border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .clickable { showBankPicker = true }
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    IranianBankLogoBadge(bankInfo = selectedBankInfo, size = 38.dp)
+                    Column {
+                        Text(
+                            text = "انتخاب بانک",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = selectedBankInfo?.persianName ?: bankName.ifBlank { "انتخاب از پک بانک‌ها" },
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+
+        DodotaTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = "نام حساب یا کارت",
+            leadingIcon = Icons.Default.CreditCard,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Text("نوع حساب:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(AccountType.values()) { type ->
+                FilterChip(
+                    selected = selectedType == type,
+                    onClick = { selectedType = type },
+                    label = { Text(type.title) }
+                )
+            }
+        }
+
+        PersianAmountInput(
+            value = balanceText,
+            onValueChange = { balanceText = it },
+            currency = currency,
+            label = "موجودی حساب"
+        )
+
+        Text("رنگ حساب:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(colors) { hex ->
+                val c = Color(android.graphics.Color.parseColor(hex))
+                val isSelected = selectedColor.equals(hex, ignoreCase = true)
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(c)
+                        .border(
+                            width = if (isSelected) 2.5.dp else 0.dp,
+                            color = if (isSelected) MaterialTheme.colorScheme.onBackground else Color.Transparent,
+                            shape = CircleShape
+                        )
+                        .clickable { selectedColor = hex }
+                )
+            }
+        }
+    }
+
+    if (showBankPicker) {
+        IranianBankPickerDialog(
+            selectedBankName = bankName,
+            onSelectBank = { chosen ->
+                bankName = chosen.persianName
+                selectedColor = chosen.primaryColorHex
+            },
+            onDismiss = { showBankPicker = false }
+        )
+    }
 }

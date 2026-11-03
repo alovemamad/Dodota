@@ -216,6 +216,7 @@ private val VipRedScheme = darkColorScheme(
 val LocalAppThemeMode = androidx.compose.runtime.staticCompositionLocalOf { AppThemeMode.VIP_RED }
 val LocalAppFontFamily = androidx.compose.runtime.staticCompositionLocalOf { ir.mmd.dodota.data.model.AppFontFamilyOption.VAZIRMATN }
 val LocalAppFontScale = androidx.compose.runtime.staticCompositionLocalOf { 1.0f }
+val LocalUseEnglishDigits = androidx.compose.runtime.compositionLocalOf { false }
 
 data class DodotaGlassStyle(
     val isGlassEnabled: Boolean = true,
@@ -240,14 +241,17 @@ fun DodotaTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    ir.mmd.dodota.util.PersianNumberFormatter.globalUseEnglishDigits = userPreferences.currency.isEnglishDigits
-    DodotaTheme(
-        themeMode = userPreferences.themeMode,
-        fontFamily = userPreferences.fontFamily,
-        fontScale = userPreferences.fontScale,
-        darkTheme = darkTheme,
-        content = content
-    )
+    val useEn = userPreferences.currency.isEnglishDigits
+    ir.mmd.dodota.util.PersianNumberFormatter.globalUseEnglishDigits = useEn
+    CompositionLocalProvider(LocalUseEnglishDigits provides useEn) {
+        DodotaTheme(
+            themeMode = userPreferences.themeMode,
+            fontFamily = userPreferences.fontFamily,
+            fontScale = userPreferences.fontScale,
+            darkTheme = darkTheme,
+            content = content
+        )
+    }
 }
 
 @Composable
@@ -263,20 +267,15 @@ fun DodotaTheme(
         AppThemeMode.SYSTEM -> if (darkTheme) StandardDarkScheme else StandardLightScheme
         AppThemeMode.LIGHT -> StandardLightScheme
         AppThemeMode.DARK -> StandardDarkScheme
-        AppThemeMode.BLUBANK -> if (darkTheme) BluRoyalDarkScheme else BluRoyalLightScheme
-        AppThemeMode.EMERALD -> if (darkTheme) EmeraldDarkScheme else EmeraldLightScheme
-        AppThemeMode.SUNSET -> if (darkTheme) SunsetDarkScheme else SunsetLightScheme
-        AppThemeMode.GOLD -> if (darkTheme) GoldDarkScheme else GoldLightScheme
-        AppThemeMode.PURPLE -> if (darkTheme) PurpleDarkScheme else PurpleLightScheme
+        AppThemeMode.BLUBANK -> BluRoyalDarkScheme
+        AppThemeMode.EMERALD -> EmeraldDarkScheme
+        AppThemeMode.SUNSET -> SunsetDarkScheme
+        AppThemeMode.GOLD -> GoldDarkScheme
+        AppThemeMode.PURPLE -> PurpleDarkScheme
         AppThemeMode.BLACK -> BlackScheme
     }
 
-    val isGlass = themeMode == AppThemeMode.VIP_RED ||
-            themeMode == AppThemeMode.BLUBANK ||
-            themeMode == AppThemeMode.SUNSET ||
-            themeMode == AppThemeMode.GOLD ||
-            themeMode == AppThemeMode.PURPLE ||
-            themeMode == AppThemeMode.BLACK
+    val isGlass = themeMode != AppThemeMode.LIGHT && themeMode != AppThemeMode.SYSTEM
 
     val glassStyle = DodotaGlassStyle(
         isGlassEnabled = isGlass,
@@ -303,13 +302,16 @@ fun DodotaTheme(
             val window = (view.context as? Activity)?.window
             if (window != null) {
                 window.statusBarColor = colorScheme.background.toArgb()
+                window.navigationBarColor = colorScheme.background.toArgb()
+                window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(colorScheme.background.toArgb()))
                 val isDark = when (themeMode) {
-                    AppThemeMode.VIP_RED, AppThemeMode.DARK, AppThemeMode.BLACK -> true
-                    AppThemeMode.SYSTEM -> darkTheme
                     AppThemeMode.LIGHT -> false
-                    else -> darkTheme
+                    AppThemeMode.SYSTEM -> darkTheme
+                    else -> true
                 }
-                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isDark
+                val insetsController = WindowCompat.getInsetsController(window, view)
+                insetsController.isAppearanceLightStatusBars = !isDark
+                insetsController.isAppearanceLightNavigationBars = !isDark
             }
         }
     }

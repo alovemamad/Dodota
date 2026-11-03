@@ -1,15 +1,23 @@
 package ir.mmd.dodota.ui.screens.calendar
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -21,12 +29,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import ir.mmd.dodota.data.model.*
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.ui.components.*
@@ -68,7 +77,20 @@ fun FinancialCalendarScreen(
     var selectedYear by remember { mutableIntStateOf(currentPDate.year) }
     var selectedMonth by remember { mutableIntStateOf(currentPDate.month) }
     var selectedDay by remember { mutableIntStateOf(currentPDate.day) }
-    var showYearMonthPickerDialog by remember { mutableStateOf(false) }
+
+    val yearsList = remember(currentPDate.year) {
+        (currentPDate.year - 20..currentPDate.year + 20).toList()
+    }
+    val yearListState = rememberLazyListState(
+        initialFirstVisibleItemIndex = (yearsList.indexOf(selectedYear) - 2).coerceAtLeast(0)
+    )
+
+    LaunchedEffect(selectedYear) {
+        val idx = yearsList.indexOf(selectedYear)
+        if (idx >= 0) {
+            yearListState.animateScrollToItem((idx - 2).coerceAtLeast(0))
+        }
+    }
 
     val daysInMonth = remember(selectedYear, selectedMonth) {
         PersianDateHelper.getDaysInPersianMonth(selectedYear, selectedMonth)
@@ -85,7 +107,7 @@ fun FinancialCalendarScreen(
     val planMap = remember(installmentPlans) { installmentPlans.associateBy { it.id } }
 
     // Build all Obligation Events across all years so we can filter by selectedYear & selectedMonth
-    val allObligationEvents = remember(debts, allInstallments, planMap) {
+    val allObligationEvents = remember(debts, allInstallments, planMap, userPreferences.currency) {
         val events = mutableListOf<CalendarObligationEvent>()
 
         // 1. Debts, Receivables & Checks
@@ -101,15 +123,15 @@ fun FinancialCalendarScreen(
             val badge = when {
                 isCheck && debt.type == DebtType.DEBT_I_OWE -> "چک پرداختی"
                 isCheck && debt.type == DebtType.RECEIVABLE_OWED_TO_ME -> "چک دریافتی"
-                debt.type == DebtType.DEBT_I_OWE -> "بدهی به شخص"
-                else -> "طلب از شخص"
+                debt.type == DebtType.DEBT_I_OWE -> "بدهی"
+                else -> "طلب"
             }
             val remaining = (debt.totalAmount - debt.paidAmount).coerceAtLeast(0L)
             events.add(
                 CalendarObligationEvent(
                     idKey = "debt_${debt.id}",
                     title = debt.personOrCompanyName,
-                    subtitle = if (debt.checkNumber.isNotBlank()) "شماره چک: ${debt.checkNumber}" else debt.notes.ifBlank { badge },
+                    subtitle = if (debt.checkNumber.isNotBlank()) "شماره چک: ${PersianNumberFormatter.formatDigits(debt.checkNumber, userPreferences.currency)}" else debt.notes.ifBlank { badge },
                     amount = if (remaining > 0) remaining else debt.totalAmount,
                     year = pDate.year,
                     month = pDate.month,
@@ -126,12 +148,12 @@ fun FinancialCalendarScreen(
         allInstallments.forEach { inst ->
             val pDate = PersianDateHelper.gregorianMillisToPersian(inst.dueDateMillis)
             val plan = planMap[inst.planId]
-            val planTitle = plan?.title ?: "خرید قسطی"
+            val planTitle = plan?.title ?: "اقساط"
             val totalInst = plan?.numberOfInstallments ?: inst.installmentIndex
             events.add(
                 CalendarObligationEvent(
                     idKey = "inst_${inst.id}",
-                    title = "$planTitle (قسط ${PersianNumberFormatter.toPersianDigits(inst.installmentIndex)} از ${PersianNumberFormatter.toPersianDigits(totalInst)})",
+                    title = "$planTitle (قسط ${PersianNumberFormatter.formatDigits(inst.installmentIndex, userPreferences.currency)} از ${PersianNumberFormatter.formatDigits(totalInst, userPreferences.currency)})",
                     subtitle = plan?.creditorOrCompany?.ifBlank { "سررسید قسط" } ?: "سررسید قسط",
                     amount = inst.amount,
                     year = pDate.year,
@@ -186,35 +208,12 @@ fun FinancialCalendarScreen(
         selectedDay == currentPDate.day
 
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
+            // Item 16 & 19: Clean title "تقویم مالی" without "(چک، قسط...)" and without "امروز" in topBar
             DodotaTopBar(
-                title = "تقویم مالی (چک، قسط، بدهی و تراکنش)",
-                onBackClick = onBack,
-                actions = {
-                    if (!isViewingToday) {
-                        TextButton(
-                            onClick = {
-                                selectedYear = currentPDate.year
-                                selectedMonth = currentPDate.month
-                                selectedDay = currentPDate.day
-                            }
-                        ) {
-                            Icon(
-                                Icons.Default.Today,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "امروز",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                }
+                title = "تقویم مالی",
+                onBackClick = onBack
             )
         }
     ) { paddingValues ->
@@ -227,7 +226,7 @@ fun FinancialCalendarScreen(
             contentPadding = PaddingValues(top = 12.dp, bottom = 50.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // 1. Dedicated Year Switcher Card + Quick Month Strip
+            // 1. Dedicated Year Switcher Card + Quick Month Strip (Item 17 & Item 21)
             item {
                 GlassCard(
                     shape = RoundedCornerShape(24.dp),
@@ -236,14 +235,35 @@ fun FinancialCalendarScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        // Year Navigation Row (جابجایی بین سال‌ها)
+                        var isYearPickerOpen by remember { mutableStateOf(false) }
+                        var yearCardDragOffset by remember { mutableFloatStateOf(0f) }
+
+                        // Year Navigation Row با قابلیت لمس روی سال برای باز شدن فهرست سال‌ها و همچنین سوایپ
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .pointerInput(selectedYear) {
+                                    detectHorizontalDragGestures(
+                                        onDragStart = { yearCardDragOffset = 0f },
+                                        onDragEnd = {
+                                            if (yearCardDragOffset > 50f) {
+                                                if (selectedYear > yearsList.first()) selectedYear--
+                                            } else if (yearCardDragOffset < -50f) {
+                                                if (selectedYear < yearsList.last()) selectedYear++
+                                            }
+                                            yearCardDragOffset = 0f
+                                        },
+                                        onHorizontalDrag = { change, dragAmount ->
+                                            change.consume()
+                                            yearCardDragOffset += dragAmount
+                                        }
+                                    )
+                                },
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             FilledTonalIconButton(
-                                onClick = { selectedYear-- },
+                                onClick = { if (selectedYear > yearsList.first()) selectedYear-- },
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.size(38.dp)
                             ) {
@@ -254,78 +274,76 @@ fun FinancialCalendarScreen(
                                 )
                             }
 
-                            // Quick Year Chips + Center Year Selector Button
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            // Center Year Display - با زدن روی آن فهرست سال‌ها باز می‌شود
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (isYearPickerOpen) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                                else MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                                border = BorderStroke(
+                                    if (isYearPickerOpen) 2.dp else 1.5.dp,
+                                    MaterialTheme.colorScheme.primary
+                                ),
+                                modifier = Modifier.clickable { isYearPickerOpen = !isYearPickerOpen }
                             ) {
-                                // Previous Year Pill
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
-                                    modifier = Modifier.clickable { selectedYear-- }
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Text(
-                                        text = PersianNumberFormatter.toPersianDigits(selectedYear - 1),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    Icon(
+                                        Icons.Default.CalendarMonth,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
                                     )
-                                }
-
-                                // Current Selected Year Badge (Clickable to open full Year/Month picker)
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                                    border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
-                                    modifier = Modifier.clickable { showYearMonthPickerDialog = true }
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            Icons.Default.CalendarMonth,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
+                                    AnimatedContent(
+                                        targetState = selectedYear,
+                                        transitionSpec = {
+                                            if (targetState > initialState) {
+                                                (slideInHorizontally { -it } + fadeIn()).togetherWith(slideOutHorizontally { it } + fadeOut())
+                                            } else {
+                                                (slideInHorizontally { it } + fadeIn()).togetherWith(slideOutHorizontally { -it } + fadeOut())
+                                            }
+                                        },
+                                        label = "selected_year_anim"
+                                    ) { targetYear ->
                                         Text(
-                                            text = "سال ${PersianNumberFormatter.toPersianDigits(selectedYear)}",
-                                            style = MaterialTheme.typography.titleMedium,
+                                            text = PersianNumberFormatter.formatDigits(targetYear, userPreferences.currency),
+                                            style = MaterialTheme.typography.headlineSmall.copy(fontSize = 22.sp),
                                             fontWeight = FontWeight.ExtraBold,
                                             color = MaterialTheme.colorScheme.primary
                                         )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Icon(
-                                            Icons.Default.ArrowDropDown,
-                                            contentDescription = "انتخاب سال",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
                                     }
+                                    Icon(
+                                        Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "باز کردن فهرست سال‌ها",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .rotate(if (isYearPickerOpen) 180f else 0f)
+                                    )
                                 }
+                            }
 
-                                // Next Year Pill
+                            if (selectedYear != currentPDate.year) {
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
-                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
-                                    modifier = Modifier.clickable { selectedYear++ }
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+                                    modifier = Modifier.clickable { selectedYear = currentPDate.year }
                                 ) {
                                     Text(
-                                        text = PersianNumberFormatter.toPersianDigits(selectedYear + 1),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        text = "امسال",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                                     )
                                 }
                             }
 
                             FilledTonalIconButton(
-                                onClick = { selectedYear++ },
+                                onClick = { if (selectedYear < yearsList.last()) selectedYear++ },
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.size(38.dp)
                             ) {
@@ -337,7 +355,153 @@ fun FinancialCalendarScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        // باز شدن گرید انتخاب سال‌ها با انیمیشن
+                        AnimatedVisibility(
+                            visible = isYearPickerOpen,
+                            enter = expandVertically(animationSpec = tween(250)) + fadeIn(),
+                            exit = shrinkVertically(animationSpec = tween(200)) + fadeOut()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 12.dp)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "انتخاب سال تقویم:",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            IconButton(
+                                                onClick = { isYearPickerOpen = false },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    contentDescription = "بستن",
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                        val gridState = rememberLazyGridState(
+                                            initialFirstVisibleItemIndex = (yearsList.indexOf(selectedYear) - 4).coerceAtLeast(0)
+                                        )
+
+                                        LazyVerticalGrid(
+                                            columns = GridCells.Fixed(4),
+                                            state = gridState,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = 200.dp)
+                                        ) {
+                                            items(yearsList, key = { it }) { year ->
+                                                val isSelected = year == selectedYear
+                                                val isCurrentYear = year == currentPDate.year
+                                                val hasObligations = allObligationEvents.any { it.year == year }
+
+                                                Surface(
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    color = if (isSelected) MaterialTheme.colorScheme.primary
+                                                    else if (isCurrentYear) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                                    else MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                                    border = BorderStroke(
+                                                        if (isSelected) 1.5.dp else if (isCurrentYear) 1.2.dp else 1.dp,
+                                                        if (isSelected) MaterialTheme.colorScheme.primary
+                                                        else if (isCurrentYear) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                                    ),
+                                                    modifier = Modifier.clickable {
+                                                        selectedYear = year
+                                                        isYearPickerOpen = false
+                                                    }
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(vertical = 10.dp),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Column(
+                                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                                            verticalArrangement = Arrangement.Center
+                                                        ) {
+                                                            Text(
+                                                                text = PersianNumberFormatter.formatDigits(year, userPreferences.currency),
+                                                                style = if (isSelected) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodySmall,
+                                                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                                            )
+                                                            if (isCurrentYear && !isSelected) {
+                                                                Text(
+                                                                    text = "امسال",
+                                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = MaterialTheme.colorScheme.primary
+                                                                )
+                                                            }
+                                                            if (hasObligations && !isSelected) {
+                                                                Box(
+                                                                    modifier = Modifier
+                                                                        .padding(top = 2.dp)
+                                                                        .size(5.dp)
+                                                                        .clip(CircleShape)
+                                                                        .background(CalendarCheckGold)
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (!isYearPickerOpen) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { isYearPickerOpen = true }
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.TouchApp,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "برای باز شدن سال‌ها روی سال لمس کنید",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         // Yearly Summary Info
                         Row(
@@ -346,14 +510,14 @@ fun FinancialCalendarScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "ماه‌های سال ${PersianNumberFormatter.toPersianDigits(selectedYear)}:",
+                                text = "ماه‌های سال ${PersianNumberFormatter.formatDigits(selectedYear, userPreferences.currency)}:",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.outline,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
                                 text = if (yearObligations.isNotEmpty()) {
-                                    "${PersianNumberFormatter.toPersianDigits(yearObligations.size)} سررسید در سال ${PersianNumberFormatter.toPersianDigits(selectedYear)}"
+                                    "${PersianNumberFormatter.formatDigits(yearObligations.size, userPreferences.currency)} سررسید در سال ${PersianNumberFormatter.formatDigits(selectedYear, userPreferences.currency)}"
                                 } else {
                                     "بدون سررسید ثبت‌شده در این سال"
                                 },
@@ -411,7 +575,7 @@ fun FinancialCalendarScreen(
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Text(
-                                                    text = PersianNumberFormatter.toPersianDigits(countInMonth),
+                                                    text = PersianNumberFormatter.formatDigits(countInMonth, userPreferences.currency),
                                                     style = MaterialTheme.typography.labelSmall,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     color = if (isMonthSelected) MaterialTheme.colorScheme.primary else Color.Black
@@ -440,75 +604,64 @@ fun FinancialCalendarScreen(
                 }
             }
 
-            // 3. Month Navigation & Calendar Grid
+            // 3. Calendar Grid Card با قابلیت سوایپ بین ماه‌ها و سال‌ها
             item {
+                var gridDragOffset by remember { mutableFloatStateOf(0f) }
                 GlassCard(
                     shape = RoundedCornerShape(22.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .pointerInput(selectedMonth, selectedYear) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { gridDragOffset = 0f },
+                                onDragEnd = {
+                                    if (gridDragOffset > 50f) {
+                                        // کشیدن به راست -> ماه قبل (یا سال قبل)
+                                        if (selectedMonth > 1) {
+                                            selectedMonth--
+                                        } else if (selectedYear > yearsList.first()) {
+                                            selectedYear--
+                                            selectedMonth = 12
+                                        }
+                                    } else if (gridDragOffset < -50f) {
+                                        // کشیدن به چپ -> ماه بعد (یا سال بعد)
+                                        if (selectedMonth < 12) {
+                                            selectedMonth++
+                                        } else if (selectedYear < yearsList.last()) {
+                                            selectedYear++
+                                            selectedMonth = 1
+                                        }
+                                    }
+                                    gridDragOffset = 0f
+                                },
+                                onHorizontalDrag = { change, dragAmount ->
+                                    change.consume()
+                                    gridDragOffset += dragAmount
+                                }
+                            )
+                        }
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        // Header without duplicate picker/selection option (Item 21), larger Year (Item 17), and clean obligation count without parentheses (Item 18)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
                         ) {
-                            IconButton(
-                                onClick = {
-                                    if (selectedMonth > 1) {
-                                        selectedMonth--
-                                    } else {
-                                        selectedMonth = 12
-                                        selectedYear--
-                                    }
-                                    selectedDay = 1
-                                }
-                            ) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "ماه قبل")
-                            }
-
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable { showYearMonthPickerDialog = true }
-                                    .padding(horizontal = 12.dp, vertical = 4.dp)
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = "${PersianDateHelper.PERSIAN_MONTHS[selectedMonth - 1]} ${PersianNumberFormatter.toPersianDigits(selectedYear)}",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.ExtraBold
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        Icons.Default.EditCalendar,
-                                        contentDescription = "تغییر سال و ماه",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                                if (monthObligations.isNotEmpty()) {
-                                    Text(
-                                        text = "${PersianNumberFormatter.toPersianDigits(monthObligations.size)} سررسید (چک/قسط/بدهی) در این ماه",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = CalendarCheckGold,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    if (selectedMonth < 12) {
-                                        selectedMonth++
-                                    } else {
-                                        selectedMonth = 1
-                                        selectedYear++
-                                    }
-                                    selectedDay = 1
-                                }
-                            ) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "ماه بعد")
+                            Text(
+                                text = "${PersianDateHelper.PERSIAN_MONTHS[selectedMonth - 1]} ${PersianNumberFormatter.formatDigits(selectedYear, userPreferences.currency)}",
+                                style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp),
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            if (monthObligations.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "${PersianNumberFormatter.formatDigits(monthObligations.size, userPreferences.currency)} سررسید در این ماه",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = CalendarCheckGold,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
 
@@ -519,93 +672,108 @@ fun FinancialCalendarScreen(
                         val rows = (daysInMonth + columns - 1) / columns
 
                         for (r in 0 until rows) {
+                            val isLastRow = r == rows - 1
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 2.dp),
-                                horizontalArrangement = Arrangement.SpaceAround
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                for (c in 0 until columns) {
-                                    val dayNum = r * columns + c + 1
-                                    if (dayNum <= daysInMonth) {
-                                        val isSelected = dayNum == selectedDay
-                                        val isTodayCell = selectedYear == currentPDate.year &&
-                                            selectedMonth == currentPDate.month &&
-                                            dayNum == currentPDate.day
-                                        val dayObs = monthObligations.filter { it.dayOfMonth == dayNum }
-                                        val hasTx = monthTransactions.any { tx ->
-                                            val p = PersianDateHelper.gregorianMillisToPersian(tx.dateMillis)
-                                            p.day == dayNum
-                                        }
-                                        val primaryEventColor = dayObs.firstOrNull()?.color
-
+                                if (!isLastRow) {
+                                    for (c in 0 until columns) {
+                                        val dayNum = r * columns + c + 1
                                         Box(
-                                            modifier = Modifier
-                                                .size(42.dp)
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .background(
-                                                    when {
-                                                        isSelected -> MaterialTheme.colorScheme.primary
-                                                        primaryEventColor != null -> primaryEventColor.copy(alpha = 0.16f)
-                                                        isTodayCell -> MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                                                        else -> Color.Transparent
-                                                    }
-                                                )
-                                                .border(
-                                                    width = when {
-                                                        primaryEventColor != null && !isSelected -> 1.dp
-                                                        isTodayCell && !isSelected -> 1.dp
-                                                        else -> 0.dp
-                                                    },
-                                                    color = when {
-                                                        primaryEventColor != null && !isSelected -> primaryEventColor.copy(alpha = 0.55f)
-                                                        isTodayCell && !isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-                                                        else -> Color.Transparent
-                                                    },
-                                                    shape = RoundedCornerShape(12.dp)
-                                                )
-                                                .clickable { selectedDay = dayNum },
+                                            modifier = Modifier.weight(1f),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text(
-                                                    text = PersianNumberFormatter.toPersianDigits(dayNum),
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = if (isSelected || dayObs.isNotEmpty() || isTodayCell) FontWeight.ExtraBold else FontWeight.Normal,
-                                                    color = when {
-                                                        isSelected -> Color.White
-                                                        primaryEventColor != null -> primaryEventColor
-                                                        else -> MaterialTheme.colorScheme.onSurface
-                                                    }
-                                                )
-                                                // Indicator Dots Row for Check / Installment / Debt / Transaction
-                                                if (!isSelected && (dayObs.isNotEmpty() || hasTx)) {
-                                                    Row(
-                                                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        dayObs.map { it.color }.distinct().take(3).forEach { dotColor ->
-                                                            Box(
-                                                                modifier = Modifier
-                                                                    .size(5.dp)
-                                                                    .clip(CircleShape)
-                                                                    .background(dotColor)
-                                                            )
-                                                        }
-                                                        if (hasTx && dayObs.isEmpty()) {
-                                                            Box(
-                                                                modifier = Modifier
-                                                                    .size(4.dp)
-                                                                    .clip(CircleShape)
-                                                                    .background(MaterialTheme.colorScheme.primary)
-                                                            )
-                                                        }
-                                                    }
+                                            CalendarDayCell(
+                                                dayNum = dayNum,
+                                                isSelected = dayNum == selectedDay,
+                                                isTodayCell = selectedYear == currentPDate.year &&
+                                                    selectedMonth == currentPDate.month &&
+                                                    dayNum == currentPDate.day,
+                                                dayObs = monthObligations.filter { it.dayOfMonth == dayNum },
+                                                hasTx = monthTransactions.any { tx ->
+                                                    val p = PersianDateHelper.gregorianMillisToPersian(tx.dateMillis)
+                                                    p.day == dayNum
+                                                },
+                                                currency = userPreferences.currency,
+                                                onSelectDay = { selectedDay = dayNum }
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    // Item 19: Last row has days 29, 30 (and 31), and opposite 30/31 on its left side is the "امروز" button/text
+                                    val daysInLastRow = daysInMonth - r * columns
+                                    for (c in 0 until daysInLastRow) {
+                                        val dayNum = r * columns + c + 1
+                                        Box(
+                                            modifier = Modifier.weight(1f),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            CalendarDayCell(
+                                                dayNum = dayNum,
+                                                isSelected = dayNum == selectedDay,
+                                                isTodayCell = selectedYear == currentPDate.year &&
+                                                    selectedMonth == currentPDate.month &&
+                                                    dayNum == currentPDate.day,
+                                                dayObs = monthObligations.filter { it.dayOfMonth == dayNum },
+                                                hasTx = monthTransactions.any { tx ->
+                                                    val p = PersianDateHelper.gregorianMillisToPersian(tx.dateMillis)
+                                                    p.day == dayNum
+                                                },
+                                                currency = userPreferences.currency,
+                                                onSelectDay = { selectedDay = dayNum }
+                                            )
+                                        }
+                                    }
+
+                                    val remainingCols = (columns - daysInLastRow).coerceAtLeast(1)
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(remainingCols.toFloat())
+                                            .height(42.dp)
+                                            .padding(horizontal = 4.dp),
+                                        contentAlignment = Alignment.CenterEnd
+                                    ) {
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = if (isViewingToday) {
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                                            } else {
+                                                MaterialTheme.colorScheme.primary
+                                            },
+                                            border = BorderStroke(
+                                                1.dp,
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                                            ),
+                                            modifier = Modifier
+                                                .clickable {
+                                                    selectedYear = currentPDate.year
+                                                    selectedMonth = currentPDate.month
+                                                    selectedDay = currentPDate.day
                                                 }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.Center
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Today,
+                                                    contentDescription = "امروز",
+                                                    tint = if (isViewingToday) MaterialTheme.colorScheme.primary else Color.White,
+                                                    modifier = Modifier.size(15.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "امروز",
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = if (isViewingToday) MaterialTheme.colorScheme.primary else Color.White
+                                                )
                                             }
                                         }
-                                    } else {
-                                        Spacer(modifier = Modifier.size(42.dp))
                                     }
                                 }
                             }
@@ -617,7 +785,7 @@ fun FinancialCalendarScreen(
             // Selected Day Header
             item {
                 Text(
-                    text = "سررسیدها و تراکنش‌های ${PersianNumberFormatter.toPersianDigits(selectedDay)} ${PersianDateHelper.PERSIAN_MONTHS[selectedMonth - 1]} ${PersianNumberFormatter.toPersianDigits(selectedYear)}",
+                    text = "سررسیدها و تراکنش‌های ${PersianNumberFormatter.formatDigits(selectedDay, userPreferences.currency)} ${PersianDateHelper.PERSIAN_MONTHS[selectedMonth - 1]} ${PersianNumberFormatter.formatDigits(selectedYear, userPreferences.currency)}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.ExtraBold
                 )
@@ -681,12 +849,28 @@ fun FinancialCalendarScreen(
                 }
             }
 
+            // Item 20: Custom smaller-font message when nothing is registered for the selected day
             if (dayObligations.isEmpty() && dayTransactions.isEmpty()) {
                 item {
-                    EmptyStateCard(
-                        title = "در این روز چک، قسط، بدهی یا تراکنشی ثبت نشده است",
-                        description = "می‌توانید از نوار بالای صفحه بین سال‌ها و ماه‌های مختلف جابجا شوید."
-                    )
+                    GlassCard(
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 24.dp, horizontal = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "برای امروز چیزی ثبت نشده برو عشق کن❤️🔥",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                 }
             }
 
@@ -694,8 +878,8 @@ fun FinancialCalendarScreen(
             if (monthObligations.isNotEmpty()) {
                 item {
                     DodotaExpandableSection(
-                        title = "همه سررسیدهای ${PersianDateHelper.PERSIAN_MONTHS[selectedMonth - 1]} ${PersianNumberFormatter.toPersianDigits(selectedYear)}",
-                        subtitle = "${PersianNumberFormatter.toPersianDigits(monthObligations.size)} مورد در این ماه",
+                        title = "همه سررسیدهای ${PersianDateHelper.PERSIAN_MONTHS[selectedMonth - 1]} ${PersianNumberFormatter.formatDigits(selectedYear, userPreferences.currency)}",
+                        subtitle = "${PersianNumberFormatter.formatDigits(monthObligations.size, userPreferences.currency)} مورد در این ماه",
                         icon = Icons.Default.EventNote,
                         initiallyExpanded = true
                     ) {
@@ -714,134 +898,83 @@ fun FinancialCalendarScreen(
             }
         }
     }
+}
 
-    // Fast Year & Month Jump Dialog
-    if (showYearMonthPickerDialog) {
-        var tempYear by remember { mutableIntStateOf(selectedYear) }
-        var tempMonth by remember { mutableIntStateOf(selectedMonth) }
-        val yearList = remember(currentPDate.year) {
-            ((currentPDate.year - 15)..(currentPDate.year + 15)).toList()
-        }
+@Composable
+private fun CalendarDayCell(
+    dayNum: Int,
+    isSelected: Boolean,
+    isTodayCell: Boolean,
+    dayObs: List<CalendarObligationEvent>,
+    hasTx: Boolean,
+    currency: AppCurrency,
+    onSelectDay: () -> Unit
+) {
+    val primaryEventColor = dayObs.firstOrNull()?.color
 
-        AlertDialog(
-            onDismissRequest = { showYearMonthPickerDialog = false },
-            title = {
-                Text(
-                    text = "جابجایی سریع بین سال‌ها و ماه‌ها",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "انتخاب سال شمسی:",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(yearList) { yr ->
-                            val isSelectedYr = yr == tempYear
-                            val yrEventsCount = allObligationEvents.count { it.year == yr }
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isSelectedYr) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (isSelectedYr) MaterialTheme.colorScheme.primary
-                                    else if (yrEventsCount > 0) CalendarCheckGold.copy(alpha = 0.6f)
-                                    else Color.Transparent
-                                ),
-                                modifier = Modifier.clickable { tempYear = yr }
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text(
-                                        text = PersianNumberFormatter.toPersianDigits(yr),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = if (isSelectedYr) Color.White else MaterialTheme.colorScheme.onSurface
-                                    )
-                                    if (yrEventsCount > 0) {
-                                        Text(
-                                            text = "${PersianNumberFormatter.toPersianDigits(yrEventsCount)} مورد",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = if (isSelectedYr) Color.White.copy(alpha = 0.9f) else CalendarCheckGold
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Text(
-                        text = "انتخاب ماه:",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    // 3x4 Grid of Months
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (row in 0 until 4) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                for (col in 0 until 3) {
-                                    val mIdx = row * 3 + col
-                                    val mNum = mIdx + 1
-                                    val mName = PersianDateHelper.PERSIAN_MONTHS[mIdx]
-                                    val isSelM = tempMonth == mNum
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = if (isSelM) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clickable { tempMonth = mNum }
-                                    ) {
-                                        Text(
-                                            text = mName,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = if (isSelM) FontWeight.ExtraBold else FontWeight.Medium,
-                                            color = if (isSelM) Color.White else MaterialTheme.colorScheme.onSurface,
-                                            textAlign = TextAlign.Center,
-                                            modifier = Modifier.padding(vertical = 8.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                when {
+                    isSelected -> MaterialTheme.colorScheme.primary
+                    primaryEventColor != null -> primaryEventColor.copy(alpha = 0.16f)
+                    isTodayCell -> MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                    else -> Color.Transparent
                 }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        selectedYear = tempYear
-                        selectedMonth = tempMonth
-                        selectedDay = 1
-                        showYearMonthPickerDialog = false
-                    }
+            )
+            .border(
+                width = when {
+                    primaryEventColor != null && !isSelected -> 1.dp
+                    isTodayCell && !isSelected -> 1.dp
+                    else -> 0.dp
+                },
+                color = when {
+                    primaryEventColor != null && !isSelected -> primaryEventColor.copy(alpha = 0.55f)
+                    isTodayCell && !isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                    else -> Color.Transparent
+                },
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable { onSelectDay() },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = PersianNumberFormatter.formatDigits(dayNum, currency),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (isSelected || dayObs.isNotEmpty() || isTodayCell) FontWeight.ExtraBold else FontWeight.Normal,
+                color = when {
+                    isSelected -> Color.White
+                    primaryEventColor != null -> primaryEventColor
+                    else -> MaterialTheme.colorScheme.onSurface
+                }
+            )
+            if (!isSelected && (dayObs.isNotEmpty() || hasTx)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("مشاهده تقویم", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showYearMonthPickerDialog = false }) {
-                    Text("انصراف")
+                    dayObs.map { it.color }.distinct().take(3).forEach { dotColor ->
+                        Box(
+                            modifier = Modifier
+                                .size(5.dp)
+                                .clip(CircleShape)
+                                .background(dotColor)
+                        )
+                    }
+                    if (hasTx && dayObs.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .size(4.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                    }
                 }
             }
-        )
+        }
     }
 }
 
@@ -875,7 +1008,7 @@ private fun ObligationCalendarCard(
             ) {
                 if (showDayBadge) {
                     Text(
-                        text = PersianNumberFormatter.toPersianDigits(event.dayOfMonth),
+                        text = PersianNumberFormatter.formatDigits(event.dayOfMonth, currency),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.ExtraBold,
                         color = event.color

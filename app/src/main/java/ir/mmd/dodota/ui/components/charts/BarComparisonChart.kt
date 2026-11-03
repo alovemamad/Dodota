@@ -244,7 +244,7 @@ fun BarComparisonChart(
                         .padding(horizontal = 2.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = group.label,
+                        text = PersianNumberFormatter.formatDigits(group.label, currency),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Normal,
                         color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -276,7 +276,7 @@ fun BarComparisonChart(
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                text = "عملکرد ${group.label}",
+                                text = "عملکرد ${PersianNumberFormatter.formatDigits(group.label, currency)}",
                                 fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.primary

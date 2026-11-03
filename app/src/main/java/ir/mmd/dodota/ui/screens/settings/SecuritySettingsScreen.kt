@@ -21,8 +21,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.preferences.UserPreferencesRepository
+import ir.mmd.dodota.ui.components.DodotaTextField
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.FeatureToggleCard
+import ir.mmd.dodota.util.PersianNumberFormatter
 import ir.mmd.dodota.util.SecurityHelper
 import kotlinx.coroutines.launch
 
@@ -39,6 +41,7 @@ fun SecuritySettingsScreen(
     var generatedRecoveryCode by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
                 title = "امنیت و قفل برنامه",
@@ -52,14 +55,14 @@ fun SecuritySettingsScreen(
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 40.dp),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 56.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
                 FeatureToggleCard(
                     icon = Icons.Default.Lock,
                     title = "فعال‌سازی قفل ورود (PIN)",
-                    description = if (userPreferences.isPinEnabled) "رمز ۴ تا ۶ رقمی فعال است" else "برای ورود به برنامه نیاز به رمز است",
+                    description = if (userPreferences.isPinEnabled) PersianNumberFormatter.formatDigits("رمز 4 تا 6 رقمی فعال است", userPreferences.currency) else "برای ورود به برنامه نیاز به رمز است",
                     isChecked = userPreferences.isPinEnabled,
                     onCheckedChange = { enabled ->
                         if (enabled) {
@@ -92,6 +95,7 @@ fun SecuritySettingsScreen(
                 item {
                     Card(
                         shape = RoundedCornerShape(18.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -148,30 +152,28 @@ fun SecuritySettingsScreen(
 
         AlertDialog(
             onDismissRequest = { showSetPinDialog = false },
-            title = { Text("تعیین رمز ۴ تا ۶ رقمی") },
+            title = { Text(PersianNumberFormatter.formatDigits("تعیین رمز 4 تا 6 رقمی", userPreferences.currency), fontWeight = FontWeight.Bold) },
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    OutlinedTextField(
+                    DodotaTextField(
                         value = pinInput,
-                        onValueChange = { if (it.length <= 6) pinInput = it },
-                        label = { Text("رمز عبور جدید") },
+                        onValueChange = { if (it.length <= 6) pinInput = PersianNumberFormatter.toEnglishDigits(it).filter { c -> c.isDigit() } },
+                        label = "رمز عبور جدید",
+                        leadingIcon = Icons.Default.Lock,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         visualTransformation = PasswordVisualTransformation(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
-                    OutlinedTextField(
+                    DodotaTextField(
                         value = confirmPinInput,
-                        onValueChange = { if (it.length <= 6) confirmPinInput = it },
-                        label = { Text("تکرار رمز عبور") },
+                        onValueChange = { if (it.length <= 6) confirmPinInput = PersianNumberFormatter.toEnglishDigits(it).filter { c -> c.isDigit() } },
+                        label = "تکرار رمز عبور",
+                        leadingIcon = Icons.Default.VpnKey,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         visualTransformation = PasswordVisualTransformation(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -180,7 +182,7 @@ fun SecuritySettingsScreen(
                 Button(
                     onClick = {
                         if (pinInput.length < 4) {
-                            Toast.makeText(context, "رمز باید حداقل ۴ رقم باشد", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, PersianNumberFormatter.formatDigits("رمز باید حداقل 4 رقم باشد", userPreferences.currency), Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         if (pinInput != confirmPinInput) {

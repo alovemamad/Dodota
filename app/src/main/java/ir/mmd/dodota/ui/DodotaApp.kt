@@ -4,18 +4,26 @@ import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.*
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AlarmOff
 import androidx.compose.material.icons.filled.AlarmOn
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Snooze
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -50,6 +58,7 @@ import ir.mmd.dodota.ui.screens.backup.BackupRestoreScreen
 import ir.mmd.dodota.ui.screens.budgets.BudgetsScreen
 import ir.mmd.dodota.ui.screens.calendar.FinancialCalendarScreen
 import ir.mmd.dodota.ui.screens.checklist.ChecklistsScreen
+import ir.mmd.dodota.ui.screens.debts.ChecksScreen
 import ir.mmd.dodota.ui.screens.debts.DebtDetailScreen
 import ir.mmd.dodota.ui.screens.debts.DebtsScreen
 import ir.mmd.dodota.ui.screens.goals.GoalsScreen
@@ -57,19 +66,21 @@ import ir.mmd.dodota.ui.screens.home.HomeScreen
 import ir.mmd.dodota.ui.screens.installments.InstallmentDetailScreen
 import ir.mmd.dodota.ui.screens.installments.InstallmentsScreen
 import ir.mmd.dodota.ui.screens.onboarding.OnboardingScreen
-import ir.mmd.dodota.ui.screens.recurring.RecurringScreen
 import ir.mmd.dodota.ui.screens.reminders.RemindersScreen
 import ir.mmd.dodota.ui.screens.reports.ReportsScreen
 import ir.mmd.dodota.ui.screens.settings.AboutScreen
 import ir.mmd.dodota.ui.screens.settings.SecuritySettingsScreen
 import ir.mmd.dodota.ui.screens.settings.SettingsScreen
 import ir.mmd.dodota.ui.screens.splash.SplashScreen
+import ir.mmd.dodota.ui.screens.tools.BahesabScreen
 import ir.mmd.dodota.ui.screens.transactions.AddEditTransactionScreen
 import ir.mmd.dodota.ui.screens.transactions.TransactionsScreen
 import ir.mmd.dodota.ui.screens.trash.TrashScreen
+import androidx.compose.ui.platform.testTag
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.ui.theme.LocalDodotaGlassStyle
 import ir.mmd.dodota.util.AlarmHelper
+import ir.mmd.dodota.util.AlarmSoundManager
 import ir.mmd.dodota.util.ReminderAlarmReceiver
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -95,6 +106,7 @@ fun DodotaApp(
     val assets by repository.allAssets.collectAsState(initial = emptyList())
     val netWorth by repository.netWorth.collectAsState(initial = 0L)
     val allBudgets by repository.allBudgets.collectAsState(initial = emptyList())
+    val activeAlarm by AlarmSoundManager.activeAlarmState.collectAsState()
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -118,7 +130,7 @@ fun DodotaApp(
     }
 
     LaunchedEffect(currentRoute) {
-        if (!hasRequestedStartupPermissions && currentRoute != null && currentRoute != Screen.Splash.route) {
+        if (!hasRequestedStartupPermissions && currentRoute == Screen.Home.route) {
             hasRequestedStartupPermissions = true
             val requiredPerms = AlarmHelper.getRequiredStartupPermissions()
             val missingPerms = requiredPerms.filter { perm ->
@@ -135,11 +147,10 @@ fun DodotaApp(
     }
 
     // ---------------------------------------------------------
-    // 2. LIVE FOREGROUND & BACKGROUND REMINDER WATCHER
+    // 2. SCHEDULE ALL ACTIVE REMINDERS WITH ALARM MANAGER
     // Ensures all scheduled reminders ring & notify reliably on time
     // ---------------------------------------------------------
     LaunchedEffect(activeReminders) {
-        // Ensure all future active reminders are registered with AlarmManager
         val nowInit = System.currentTimeMillis()
         activeReminders.forEach { rem ->
             if (rem.isEnabled && !rem.isCompleted && rem.dueDateTimeMillis > nowInit) {
@@ -152,32 +163,6 @@ fun DodotaApp(
                     isFromBoot = true
                 )
             }
-        }
-
-        // Poll every 4 seconds while app is open to fire any reminder whose due time has arrived
-        while (true) {
-            val now = System.currentTimeMillis()
-            for (rem in activeReminders) {
-                // Fire if enabled, not completed, and due within the last 15 minutes up to now
-                if (rem.isEnabled && !rem.isCompleted && rem.dueDateTimeMillis <= now && (now - rem.dueDateTimeMillis) < 15 * 60 * 1000L) {
-                    if (AlarmHelper.markReminderTriggered(rem.id)) {
-                        val descText = rem.description.ifEmpty { "موعد ${rem.targetType.title} فرا رسیده است." }
-                        ReminderAlarmReceiver.showAlarmNotification(
-                            context = context,
-                            notifId = rem.id.toInt(),
-                            title = rem.title,
-                            message = descText
-                        )
-                        Toast.makeText(
-                            context,
-                            "⏰ یادآور: ${rem.title} - $descText",
-                            Toast.LENGTH_LONG
-                        ).show()
-                        repository.updateReminder(rem.copy(isCompleted = true))
-                    }
-                }
-            }
-            delay(4_000L)
         }
     }
 
@@ -312,6 +297,111 @@ fun DodotaApp(
         )
     }
 
+    // Active Reminder Alarm Full Dialog
+    if (activeAlarm != null) {
+        val currentAlarm = activeAlarm!!
+        AlertDialog(
+            onDismissRequest = { /* Require user to click Stop or Snooze */ },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.NotificationsActive,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "🔔 سررسید موعد یادآور",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = currentAlarm.title,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (currentAlarm.desc.isNotBlank()) {
+                        Text(
+                            text = currentAlarm.desc,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.AlarmOn,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "صدای زنگ و آلارم در حال پخش است.",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        AlarmSoundManager.stopAlarm(context, currentAlarm.notifId)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("stop_alarm_button")
+                ) {
+                    Icon(Icons.Default.AlarmOff, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("قطع زنگ و بستن", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        AlarmSoundManager.snoozeAlarm(
+                            context = context,
+                            reminderId = currentAlarm.reminderId,
+                            title = currentAlarm.title,
+                            desc = currentAlarm.desc,
+                            notifId = currentAlarm.notifId,
+                            minutes = 10
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("snooze_alarm_button")
+                ) {
+                    Icon(Icons.Default.Snooze, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("۱۰ دقیقه بعد یادآوری کن (تعویق)")
+                }
+            }
+        )
+    }
+
     val showBottomBar = currentRoute in listOf(
         Screen.Home.route,
         Screen.Transactions.route,
@@ -324,7 +414,17 @@ fun DodotaApp(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets.safeDrawing,
         bottomBar = {
-            AnimatedVisibility(visible = showBottomBar) {
+            AnimatedVisibility(
+                visible = showBottomBar,
+                enter = slideInVertically(
+                    initialOffsetY = { it },
+                    animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
+                ) + fadeIn(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)),
+                exit = slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
+                ) + fadeOut(animationSpec = tween(durationMillis = 150))
+            ) {
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -332,20 +432,12 @@ fun DodotaApp(
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                         .clip(RoundedCornerShape(26.dp))
                         .border(
-                            BorderStroke(
-                                1.dp,
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
-                                        Color.White.copy(alpha = 0.14f),
-                                        glassStyle.cardBorderColor
-                                    )
-                                )
-                            ),
+                            BorderStroke(1.dp, glassStyle.cardBorderColor),
                             RoundedCornerShape(26.dp)
                         ),
                     color = glassStyle.cardContainerColor,
-                    tonalElevation = 0.dp
+                    tonalElevation = 0.dp,
+                    shadowElevation = 8.dp
                 ) {
                     NavigationBar(
                         containerColor = Color.Transparent,
@@ -354,6 +446,11 @@ fun DodotaApp(
                     ) {
                         BottomNavItem.values().forEach { item ->
                             val isSelected = currentRoute == item.route
+                            val iconScale by animateFloatAsState(
+                                targetValue = if (isSelected) 1.18f else 1.0f,
+                                animationSpec = spring(dampingRatio = 0.55f, stiffness = 420f),
+                                label = "nav_icon_scale"
+                            )
                             NavigationBarItem(
                                 selected = isSelected,
                                 onClick = {
@@ -368,7 +465,11 @@ fun DodotaApp(
                                 icon = {
                                     Icon(
                                         imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
-                                        contentDescription = item.title
+                                        contentDescription = item.title,
+                                        modifier = Modifier.graphicsLayer {
+                                            scaleX = iconScale
+                                            scaleY = iconScale
+                                        }
                                     )
                                 },
                                 label = {
@@ -399,7 +500,22 @@ fun DodotaApp(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .imePadding()
+                .consumeWindowInsets(paddingValues)
+                .imePadding(),
+            enterTransition = {
+                fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
+                scaleIn(initialScale = 0.97f, animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
+            },
+            exitTransition = {
+                fadeOut(animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing))
+            },
+            popEnterTransition = {
+                fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
+                scaleIn(initialScale = 0.97f, animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
+            },
+            popExitTransition = {
+                fadeOut(animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing))
+            }
         ) {
             composable(Screen.Splash.route) {
                 SplashScreen(
@@ -467,19 +583,12 @@ fun DodotaApp(
                     userPreferences = userPreferences,
                     accounts = accounts,
                     allTransactions = transactions,
-                    recentTransactions = transactions.take(8),
                     categories = categories,
                     upcomingInstallments = upcomingInstallments,
                     activeReminders = activeReminders,
                     netWorth = netWorth,
                     onNavigateToAddTransaction = { type ->
-                        navController.navigate(Screen.AddTransaction.createRoute(type ?: "EXPENSE"))
-                    },
-                    onNavigateToTransactionDetail = { txId ->
-                        navController.navigate(Screen.EditTransaction.createRoute(txId))
-                    },
-                    onNavigateToTransactions = {
-                        navController.navigate(Screen.Transactions.route)
+                        navController.navigate(Screen.AddTransaction.createRoute(type))
                     },
                     onNavigateToAccounts = {
                         navController.navigate(Screen.Accounts.route)
@@ -508,8 +617,16 @@ fun DodotaApp(
                     onNavigateToChecklists = {
                         navController.navigate(Screen.Checklists.route)
                     },
-                    onNavigateToRecurring = {
-                        navController.navigate(Screen.Recurring.route)
+                    onNavigateToChecks = {
+                        navController.navigate(Screen.Checks.route)
+                    },
+                    onNavigateToBahesab = {
+                        navController.navigate(Screen.Bahesab.route)
+                    },
+                    onToggleBalanceVisibility = {
+                        coroutineScope.launch {
+                            preferencesRepo.setBalanceHidden(!userPreferences.isBalanceHidden)
+                        }
                     }
                 )
             }
@@ -521,8 +638,8 @@ fun DodotaApp(
                     transactions = transactions,
                     accounts = accounts,
                     categories = categories,
-                    onNavigateToAdd = {
-                        navController.navigate(Screen.AddTransaction.createRoute("EXPENSE"))
+                    onNavigateToAdd = { type ->
+                        navController.navigate(Screen.AddTransaction.createRoute(type.name))
                     },
                     onNavigateToEdit = { txId ->
                         navController.navigate(Screen.EditTransaction.createRoute(txId))
@@ -639,6 +756,20 @@ fun DodotaApp(
                 )
             }
 
+            composable(Screen.Checks.route) {
+                ChecksScreen(
+                    debts = debts,
+                    userPreferences = userPreferences,
+                    repository = repository,
+                    accounts = accounts,
+                    activeReminders = activeReminders,
+                    onBack = { navController.popBackStack() },
+                    onNavigateToDetail = { debtId ->
+                        navController.navigate(Screen.DebtDetail.createRoute(debtId))
+                    }
+                )
+            }
+
             composable(
                 route = Screen.DebtDetail.route,
                 arguments = listOf(navArgument("debtId") { type = NavType.LongType })
@@ -737,17 +868,6 @@ fun DodotaApp(
                 )
             }
 
-            // Recurring
-            composable(Screen.Recurring.route) {
-                RecurringScreen(
-                    repository = repository,
-                    accounts = accounts,
-                    categories = categories,
-                    userPreferences = userPreferences,
-                    onBack = { navController.popBackStack() }
-                )
-            }
-
             // Reminders
             composable(Screen.Reminders.route) {
                 RemindersScreen(
@@ -764,6 +884,14 @@ fun DodotaApp(
                     userPreferences = userPreferences,
                     accounts = accounts,
                     categories = categories,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            // Bahesab (وام و سپرده)
+            composable(Screen.Bahesab.route) {
+                BahesabScreen(
+                    userPreferences = userPreferences,
                     onBack = { navController.popBackStack() }
                 )
             }

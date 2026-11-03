@@ -142,7 +142,7 @@ data class ReminderEntity(
     val targetType: ReminderTargetType,
     val targetId: Long? = null,
     val dueDateTimeMillis: Long,
-    val reminderOffsetDays: Int = 1,
+    val reminderOffsetDays: Int = 0,
     val isCompleted: Boolean = false,
     val isEnabled: Boolean = true
 )
