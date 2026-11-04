@@ -46,12 +46,6 @@ object AlarmHelper {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             list.add(Manifest.permission.POST_NOTIFICATIONS)
         }
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
-            list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
-            list.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        }
         return list
     }
 
@@ -67,14 +61,7 @@ object AlarmHelper {
     }
 
     fun isBackupPermissionGranted(context: Context): Boolean {
-        return if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
+        return true
     }
 
     fun canScheduleExactAlarms(context: Context): Boolean {

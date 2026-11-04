@@ -8,9 +8,7 @@ import ir.mmd.dodota.worker.NightlyBackupWorker
 
 import androidx.work.Configuration
 
-class DodotaApplication : Application(), Configuration.Provider {
-    override val workManagerConfiguration: Configuration
-        get() = Configuration.Builder().build()
+class DodotaApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()

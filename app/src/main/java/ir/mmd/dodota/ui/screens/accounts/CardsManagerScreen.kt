@@ -31,6 +31,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
@@ -802,41 +803,8 @@ private fun RealisticIranianBankCardItem(
                             }
                         }
 
-                        // Left side (in RTL): Classic "کارت نقدی / Debit Card" badge + Quick Share button
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            DebitCardShetabBadge(textColor = if (isLightCard) Color(0xFF18181B) else Color.White)
-                            IconButton(
-                                onClick = {
-                                    val cleanCard = account.cardNumber.filter { it.isDigit() }
-                                    val formattedCard = if (cleanCard.length == 16) cleanCard.chunked(4).joinToString(" - ") else account.cardNumber.trim()
-                                    val owner = account.cardHolderName.ifBlank { account.name }.trim()
-                                    val shareText = buildString {
-                                        if (formattedCard.isNotBlank()) append("شماره کارت: $formattedCard\n")
-                                        if (owner.isNotBlank()) append("به نام: $owner")
-                                    }.trim()
-                                    if (shareText.isNotBlank()) {
-                                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/plain"
-                                            putExtra(Intent.EXTRA_TEXT, shareText)
-                                        }
-                                        context.startActivity(Intent.createChooser(sendIntent, "ارسال اطلاعات کارت"))
-                                    } else {
-                                        Toast.makeText(context, "اطلاعات کارت جهت ارسال ثبت نشده است", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Share,
-                                    contentDescription = "ارسال شماره کارت و نام صاحب کارت",
-                                    tint = if (isLightCard) Color(0xFF18181B) else Color.White,
-                                    modifier = Modifier.size(17.dp)
-                                )
-                            }
-                        }
+                        // Left side (in RTL): Classic "کارت نقدی / Debit Card" badge
+                        DebitCardShetabBadge(textColor = if (isLightCard) Color(0xFF18181B) else Color.White)
                     }
 
                     // 2. UPPER-CENTER: Account Number + Sheba (IR...) in High-Contrast Shielded Capsule
@@ -918,28 +886,45 @@ private fun RealisticIranianBankCardItem(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        // 16-Digit Card Number (tappable to copy)
-                        Text(
-                            text = formatCardNumberGroups(account.cardNumber, currency.isEnglishDigits),
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontSize = 20.5.sp,
-                                letterSpacing = 2.4.sp,
-                                textDirection = TextDirection.Ltr
-                            ),
-                            fontWeight = FontWeight.ExtraBold,
-                            color = cardTextColor,
-                            textAlign = TextAlign.Center,
+                        // 16-Digit Card Number (tappable to copy) with high-contrast frosted backdrop & shadow
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isLightCard) Color(0x22000000) else Color(0x55000000),
+                            border = BorderStroke(0.8.dp, if (isLightCard) Color(0x35000000) else Color(0x35FFFFFF)),
+                            shadowElevation = 3.dp,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(RoundedCornerShape(10.dp))
                                 .clickable { onCopyField("شماره کارت", account.cardNumber) }
-                                .padding(vertical = 2.dp)
-                        )
+                        ) {
+                            Text(
+                                text = formatCardNumberGroups(account.cardNumber, currency.isEnglishDigits),
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontSize = 20.sp,
+                                    letterSpacing = 2.4.sp,
+                                    textDirection = TextDirection.Ltr,
+                                    shadow = Shadow(
+                                        color = if (isLightCard) Color.Black.copy(alpha = 0.35f) else Color.Black.copy(alpha = 0.85f),
+                                        offset = Offset(1f, 1.5f),
+                                        blurRadius = 3.5f
+                                    )
+                                ),
+                                fontWeight = FontWeight.ExtraBold,
+                                color = cardTextColor,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 3.5.dp)
+                            )
+                        }
 
                         // Cardholder Name centered below card number (tappable to copy)
                         Text(
                             text = account.cardHolderName.ifBlank { account.name },
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                shadow = Shadow(
+                                    color = if (isLightCard) Color.Transparent else Color.Black.copy(alpha = 0.65f),
+                                    offset = Offset(1f, 1f),
+                                    blurRadius = 2.5f
+                                )
+                            ),
                             fontWeight = FontWeight.ExtraBold,
                             color = cardSubtextColor,
                             maxLines = 1,
@@ -963,7 +948,7 @@ private fun RealisticIranianBankCardItem(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Right side in RTL: تاریخ انقضا (۲ بخش جداگانه: سال و ماه)
+                            // Right side in RTL: تاریخ انقضا (۲ بخش جداگانه: سال و ماه با کپسول مات و سایه محو)
                             val (expYear, expMonth) = remember(account.expiryDate) {
                                 parseExpiryYearAndMonth(account.expiryDate)
                             }
@@ -982,7 +967,13 @@ private fun RealisticIranianBankCardItem(
                             ) {
                                 Text(
                                     text = "تاریخ انقضا:",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        shadow = Shadow(
+                                            color = if (isLightCard) Color.Transparent else Color.Black.copy(alpha = 0.6f),
+                                            offset = Offset(1f, 1f),
+                                            blurRadius = 2.5f
+                                        )
+                                    ),
                                     fontWeight = FontWeight.ExtraBold,
                                     color = if (isLightCard) Color(0xFF18181B) else Color.White.copy(alpha = 0.90f)
                                 )
@@ -992,66 +983,91 @@ private fun RealisticIranianBankCardItem(
                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
                                         Surface(
-                                            shape = RoundedCornerShape(5.dp),
-                                            color = if (isLightCard) Color(0x1F000000) else Color.White.copy(alpha = 0.20f),
-                                            border = BorderStroke(0.8.dp, if (isLightCard) Color(0x44000000) else Color.White.copy(alpha = 0.35f))
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = if (isLightCard) Color(0x35000000) else Color(0x73000000),
+                                            border = BorderStroke(0.8.dp, if (isLightCard) Color(0x55000000) else Color(0x44FFFFFF)),
+                                            shadowElevation = 2.dp
                                         ) {
                                             Text(
                                                 text = if (expYear.isBlank()) "--"
                                                 else PersianNumberFormatter.formatDigits(expYear.padStart(2, '0'), currency),
                                                 style = MaterialTheme.typography.bodySmall.copy(
-                                                    textDirection = TextDirection.Ltr
+                                                    textDirection = TextDirection.Ltr,
+                                                    shadow = Shadow(
+                                                        color = Color.Black.copy(alpha = 0.55f),
+                                                        offset = Offset(1f, 1f),
+                                                        blurRadius = 2.5f
+                                                    )
                                                 ),
                                                 fontWeight = FontWeight.ExtraBold,
                                                 color = cardTextColor,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp)
                                             )
                                         }
                                         Surface(
-                                            shape = RoundedCornerShape(5.dp),
-                                            color = if (isLightCard) Color(0x1F000000) else Color.White.copy(alpha = 0.20f),
-                                            border = BorderStroke(0.8.dp, if (isLightCard) Color(0x44000000) else Color.White.copy(alpha = 0.35f))
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = if (isLightCard) Color(0x35000000) else Color(0x73000000),
+                                            border = BorderStroke(0.8.dp, if (isLightCard) Color(0x55000000) else Color(0x44FFFFFF)),
+                                            shadowElevation = 2.dp
                                         ) {
                                             Text(
                                                 text = if (expMonth.isBlank()) "--"
                                                 else PersianNumberFormatter.formatDigits(expMonth.padStart(2, '0'), currency),
                                                 style = MaterialTheme.typography.bodySmall.copy(
-                                                    textDirection = TextDirection.Ltr
+                                                    textDirection = TextDirection.Ltr,
+                                                    shadow = Shadow(
+                                                        color = Color.Black.copy(alpha = 0.55f),
+                                                        offset = Offset(1f, 1f),
+                                                        blurRadius = 2.5f
+                                                    )
                                                 ),
                                                 fontWeight = FontWeight.ExtraBold,
                                                 color = cardTextColor,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp)
                                             )
                                         }
                                     }
                                 }
                             }
 
-                            // Left side in RTL: CVV2 in Frosted Capsule (LTR Layout so CVV2: is on left and digits on right)
+                            // Left side in RTL: CVV2 in Frosted High-Contrast Capsule (LTR Layout so CVV2: is on left and digits on right)
                             Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = if (isLightCard) Color(0x1F000000) else Color.White.copy(alpha = 0.20f),
-                                border = BorderStroke(0.8.dp, if (isLightCard) Color(0x44000000) else Color.White.copy(alpha = 0.35f)),
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isLightCard) Color(0x38000000) else Color(0x73000000),
+                                border = BorderStroke(0.8.dp, if (isLightCard) Color(0x55000000) else Color(0x44FFFFFF)),
+                                shadowElevation = 3.dp,
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
+                                    .clip(RoundedCornerShape(8.dp))
                                     .clickable { onCopyField("CVV2", account.cvv2) }
                             ) {
                                 CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
                                         Text(
                                             text = "CVV2:",
-                                            style = MaterialTheme.typography.labelSmall,
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                shadow = Shadow(
+                                                    color = Color.Black.copy(alpha = 0.5f),
+                                                    offset = Offset(1f, 1f),
+                                                    blurRadius = 2.5f
+                                                )
+                                            ),
                                             fontWeight = FontWeight.ExtraBold,
                                             color = if (isLightCard) Color(0xFFB45309) else horizonAccentColor
                                         )
                                         Text(
                                             text = if (account.cvv2.isBlank()) "---"
                                             else PersianNumberFormatter.formatDigits(account.cvv2, currency),
-                                            style = MaterialTheme.typography.bodySmall,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                shadow = Shadow(
+                                                    color = Color.Black.copy(alpha = 0.5f),
+                                                    offset = Offset(1f, 1f),
+                                                    blurRadius = 2.5f
+                                                )
+                                            ),
                                             fontWeight = FontWeight.ExtraBold,
                                             color = cardTextColor
                                         )
@@ -1101,11 +1117,10 @@ private fun RealisticIranianBankCardItem(
                 ) {
                     IconButton(
                         onClick = {
-                            val cleanCard = account.cardNumber.filter { it.isDigit() }
-                            val formattedCard = if (cleanCard.length == 16) cleanCard.chunked(4).joinToString(" - ") else account.cardNumber.trim()
+                            val cleanCard = account.cardNumber.filter { it.isDigit() }.ifBlank { account.cardNumber.trim() }
                             val owner = account.cardHolderName.ifBlank { account.name }.trim()
                             val shareText = buildString {
-                                if (formattedCard.isNotBlank()) append("شماره کارت: $formattedCard\n")
+                                if (cleanCard.isNotBlank()) append("شماره کارت: $cleanCard\n")
                                 if (owner.isNotBlank()) append("به نام: $owner")
                             }.trim()
                             if (shareText.isNotBlank()) {
