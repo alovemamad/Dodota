@@ -468,6 +468,9 @@ interface ChandRoozDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRecord(record: ChandRoozRecordEntity): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(records: List<ChandRoozRecordEntity>)
+
     @Update
     suspend fun updateRecord(record: ChandRoozRecordEntity)
 

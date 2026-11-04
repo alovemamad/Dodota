@@ -3,6 +3,7 @@ package ir.mmd.dodota.ui.screens.accounts
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -278,6 +279,7 @@ private fun RealisticIranianBankCardItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val context = LocalContext.current
     val bankInfo = remember(account.bankName, account.cardNumber) {
         IranianBanksCatalog.resolveBank(account.bankName, account.cardNumber)
     }
@@ -800,8 +802,41 @@ private fun RealisticIranianBankCardItem(
                             }
                         }
 
-                        // Left side (in RTL): Classic "کارت نقدی / Debit Card" badge
-                        DebitCardShetabBadge(textColor = if (isLightCard) Color(0xFF18181B) else Color.White)
+                        // Left side (in RTL): Classic "کارت نقدی / Debit Card" badge + Quick Share button
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            DebitCardShetabBadge(textColor = if (isLightCard) Color(0xFF18181B) else Color.White)
+                            IconButton(
+                                onClick = {
+                                    val cleanCard = account.cardNumber.filter { it.isDigit() }
+                                    val formattedCard = if (cleanCard.length == 16) cleanCard.chunked(4).joinToString(" - ") else account.cardNumber.trim()
+                                    val owner = account.cardHolderName.ifBlank { account.name }.trim()
+                                    val shareText = buildString {
+                                        if (formattedCard.isNotBlank()) append("شماره کارت: $formattedCard\n")
+                                        if (owner.isNotBlank()) append("به نام: $owner")
+                                    }.trim()
+                                    if (shareText.isNotBlank()) {
+                                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_TEXT, shareText)
+                                        }
+                                        context.startActivity(Intent.createChooser(sendIntent, "ارسال اطلاعات کارت"))
+                                    } else {
+                                        Toast.makeText(context, "اطلاعات کارت جهت ارسال ثبت نشده است", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Share,
+                                    contentDescription = "ارسال شماره کارت و نام صاحب کارت",
+                                    tint = if (isLightCard) Color(0xFF18181B) else Color.White,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                            }
+                        }
                     }
 
                     // 2. UPPER-CENTER: Account Number + Sheba (IR...) in High-Contrast Shielded Capsule
@@ -992,7 +1027,7 @@ private fun RealisticIranianBankCardItem(
                                 }
                             }
 
-                            // Left side in RTL: CVV2 in Frosted Capsule
+                            // Left side in RTL: CVV2 in Frosted Capsule (LTR Layout so CVV2: is on left and digits on right)
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
                                 color = if (isLightCard) Color(0x1F000000) else Color.White.copy(alpha = 0.20f),
@@ -1001,27 +1036,26 @@ private fun RealisticIranianBankCardItem(
                                     .clip(RoundedCornerShape(6.dp))
                                     .clickable { onCopyField("CVV2", account.cvv2) }
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "CVV2: ",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            textDirection = TextDirection.Ltr
-                                        ),
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = if (isLightCard) Color(0xFFB45309) else horizonAccentColor
-                                    )
-                                    Text(
-                                        text = if (account.cvv2.isBlank()) "---"
-                                        else PersianNumberFormatter.formatDigits(account.cvv2, currency),
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            textDirection = TextDirection.Ltr
-                                        ),
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = cardTextColor
-                                    )
+                                CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "CVV2:",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = if (isLightCard) Color(0xFFB45309) else horizonAccentColor
+                                        )
+                                        Text(
+                                            text = if (account.cvv2.isBlank()) "---"
+                                            else PersianNumberFormatter.formatDigits(account.cvv2, currency),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = cardTextColor
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1065,6 +1099,35 @@ private fun RealisticIranianBankCardItem(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    IconButton(
+                        onClick = {
+                            val cleanCard = account.cardNumber.filter { it.isDigit() }
+                            val formattedCard = if (cleanCard.length == 16) cleanCard.chunked(4).joinToString(" - ") else account.cardNumber.trim()
+                            val owner = account.cardHolderName.ifBlank { account.name }.trim()
+                            val shareText = buildString {
+                                if (formattedCard.isNotBlank()) append("شماره کارت: $formattedCard\n")
+                                if (owner.isNotBlank()) append("به نام: $owner")
+                            }.trim()
+                            if (shareText.isNotBlank()) {
+                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                }
+                                context.startActivity(Intent.createChooser(sendIntent, "ارسال اطلاعات کارت"))
+                            } else {
+                                Toast.makeText(context, "اطلاعات کارت جهت ارسال ثبت نشده است", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.size(30.dp)
+                    ) {
+                        Icon(
+                            Icons.Outlined.Share,
+                            contentDescription = "ارسال اطلاعات کارت",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+
                     TextButton(
                         onClick = {
                             val fullInfo = buildString {

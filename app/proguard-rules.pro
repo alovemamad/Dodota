@@ -12,10 +12,11 @@
 #   public *;
 #}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Keep data models and serialization for Backup / Restore
+-keep class ir.mmd.dodota.data.model.** { *; }
+-keepclassmembers class ir.mmd.dodota.data.model.** { *; }
+-keep class com.squareup.moshi.** { *; }
+-keepclassmembers class com.squareup.moshi.** { *; }
+-keep interface com.squareup.moshi.** { *; }
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile

@@ -58,9 +58,9 @@ fun BackupRestoreScreen(
         backupFiles = backupRepository.listBackupFiles()
     }
 
-    // System file picker to pick JSON backup
+    // System file picker to pick JSON backup (OpenDocument allows picking any file format across phone storage)
     val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
             coroutineScope.launch {
@@ -208,13 +208,7 @@ fun BackupRestoreScreen(
                             FilledTonalButton(
                                 onClick = {
                                     lastSavedFile?.let { file ->
-                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                            type = "application/json"
-                                            putExtra(Intent.EXTRA_STREAM, Uri.fromFile(file))
-                                            putExtra(Intent.EXTRA_SUBJECT, "پشتیبان مالی مای‌فایننس")
-                                            putExtra(Intent.EXTRA_TEXT, "فایل پشتیبان اطلاعات مالی اپلیکیشن")
-                                        }
-                                        context.startActivity(Intent.createChooser(shareIntent, "اشتراک‌گذاری فایل پشتیبان"))
+                                        shareBackupFileSafely(context, file)
                                     }
                                 },
                                 shape = RoundedCornerShape(12.dp),
@@ -244,7 +238,7 @@ fun BackupRestoreScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "می‌توانید هر فایل پشتیبان JSON قبلی را از حافظه گوشی یا پیام‌رسان‌ها انتخاب کرده و بازگردانید.",
+                            text = "می‌توانید هر فایل پشتیبان JSON قبلی یا جدید را از حافظه گوشی یا پیام‌رسان‌ها انتخاب کرده و بازگردانید.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline
                         )
@@ -253,7 +247,7 @@ fun BackupRestoreScreen(
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
                                 onClick = {
-                                    filePickerLauncher.launch("application/json")
+                                    filePickerLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
                                 },
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.weight(1f)
@@ -335,6 +329,12 @@ fun BackupRestoreScreen(
                             }
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = { shareBackupFileSafely(context, file) }
+                                ) {
+                                    Icon(Icons.Default.Share, contentDescription = "اشتراک‌گذاری", tint = MaterialTheme.colorScheme.primary)
+                                }
+
                                 IconButton(
                                     onClick = { showRestoreConfirmDialog = file }
                                 ) {
@@ -470,3 +470,27 @@ fun BackupRestoreScreen(
         )
     }
 }
+
+private fun shareBackupFileSafely(context: android.content.Context, file: File) {
+    try {
+        val contentUri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.provider",
+            file
+        )
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/json"
+            putExtra(Intent.EXTRA_STREAM, contentUri)
+            putExtra(Intent.EXTRA_SUBJECT, "پشتیبان مالی دودوتا")
+            putExtra(Intent.EXTRA_TEXT, "فایل پشتیبان اطلاعات مالی اپلیکیشن دودوتا (${file.name})")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(shareIntent, "اشتراک‌گذاری فایل پشتیبان").apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(chooser)
+    } catch (e: Exception) {
+        Toast.makeText(context, "خطا در اشتراک‌گذاری: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+    }
+}
+
