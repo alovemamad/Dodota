@@ -282,6 +282,12 @@ private fun RealisticIranianBankCardItem(
         IranianBanksCatalog.resolveBank(account.bankName, account.cardNumber)
     }
 
+    val bankId = bankInfo?.id ?: ""
+    val isOmidBank = remember(account.bankName, account.name) {
+        account.bankName.contains("امید", ignoreCase = true) || account.name.contains("امید", ignoreCase = true)
+    }
+    val isLightCard = bankId == "saman" || isOmidBank || bankId == "mehr-iran"
+
     val baseColor = remember(account.colorHex, bankInfo) {
         bankInfo?.primaryColor ?: try {
             Color(android.graphics.Color.parseColor(account.colorHex))
@@ -291,17 +297,38 @@ private fun RealisticIranianBankCardItem(
     }
     val horizonAccentColor = bankInfo?.accentColor ?: Color(0xFFF97316)
 
-    val normalizedSheba = remember(account.shebaNumber) {
-        if (account.shebaNumber.isBlank()) ""
-        else if (account.shebaNumber.uppercase().startsWith("IR")) account.shebaNumber.uppercase()
-        else "IR${account.shebaNumber}"
+    // Sheba number from account (always displayed on card UI so user can view & copy, even for banks that don't print Sheba on physical plastic)
+    val displaySheba = remember(account.shebaNumber) {
+        val trimmed = account.shebaNumber.trim()
+        if (trimmed.isNotBlank()) {
+            if (trimmed.uppercase().startsWith("IR")) trimmed.uppercase()
+            else "IR${trimmed.uppercase()}"
+        } else ""
+    }
+
+    // High-contrast typography palette per bank style
+    val cardTextColor = when {
+        bankId == "saman" -> Color(0xFF18181B)
+        bankId == "pasargad" -> Color(0xFFFECC09)
+        bankId == "mellat" -> Color(0xFFF59E0B)
+        bankId == "mehr-iran" -> Color(0xFF14290F)
+        isOmidBank -> Color(0xFF1E293B)
+        else -> Color.White
+    }
+    val cardSubtextColor = when {
+        bankId == "saman" -> Color(0xFF27272A)
+        bankId == "pasargad" -> Color(0xFFFDE047)
+        bankId == "mellat" -> Color(0xFFFBBF24)
+        bankId == "mehr-iran" -> Color(0xFF1E3A15)
+        isOmidBank -> Color(0xFF334155)
+        else -> Color.White.copy(alpha = 0.88f)
     }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        // Physical ISO/IEC 7810 ID-1 Bank Card Aspect Ratio (~1.586f) - طراحی کاملاً هماهنگ با هویت و لوگوی بانک
+        // Physical ISO/IEC 7810 ID-1 Bank Card Aspect Ratio (~1.586f) - طراحی کاملاً هماهنگ با کارت‌های فیزیکی کاربر
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = Color.Transparent,
@@ -322,22 +349,21 @@ private fun RealisticIranianBankCardItem(
                 .aspectRatio(1.58f)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                // Realistic Coordinated Bank Card Canvas Background (طراحی پس‌زمینه اختصاصی و هماهنگ با لوگو)
+                // Realistic Coordinated Bank Card Canvas Background (طراحی اختصاصی الهام‌گرفته از کارت‌های کاربر)
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val w = size.width
                     val h = size.height
-                    val bankId = bankInfo?.id ?: ""
 
                     // 1. Dynamic Bank Brand Palette Gradients
                     val gradientColors = when (bankId) {
                         "blu" -> listOf(Color(0xFF2563EB), Color(0xFF1D4ED8), Color(0xFF0F172A))
-                        "pasargad" -> listOf(Color(0xFF262626), Color(0xFF18181B), Color(0xFF09090B))
-                        "mellat" -> listOf(Color(0xFFDC2626), Color(0xFF991B1B), Color(0xFF450A0A))
+                        "pasargad" -> listOf(Color(0xFF18181B), Color(0xFF09090B), Color(0xFF000000))
+                        "mellat" -> listOf(Color(0xFF27272A), Color(0xFF18181B), Color(0xFF09090B))
                         "melli" -> listOf(Color(0xFFB91C1C), Color(0xFF881337), Color(0xFF0F172A))
-                        "saman" -> listOf(Color(0xFF0284C7), Color(0xFF0369A1), Color(0xFF082F49))
+                        "saman" -> listOf(Color(0xFFFACC15), Color(0xFFEAB308), Color(0xFFCA8A04))
                         "keshavarzi" -> listOf(Color(0xFF16A34A), Color(0xFF14532D), Color(0xFF052E16))
                         "tejarat" -> listOf(Color(0xFF2563EB), Color(0xFF1E40AF), Color(0xFF172554))
-                        "sepah" -> listOf(Color(0xFF475569), Color(0xFF334155), Color(0xFF0F172A))
+                        "sepah" -> listOf(Color(0xFF334155), Color(0xFF1E293B), Color(0xFF0F172A))
                         "maskan" -> listOf(Color(0xFFEA580C), Color(0xFFC2410C), Color(0xFF431407))
                         "refah" -> listOf(Color(0xFF1E40AF), Color(0xFF172554), Color(0xFF0F172A))
                         "saderat" -> listOf(Color(0xFF312E81), Color(0xFF1E1B4B), Color(0xFF0F172A))
@@ -348,10 +374,10 @@ private fun RealisticIranianBankCardItem(
                         "shahr" -> listOf(Color(0xFFDC2626), Color(0xFF991B1B), Color(0xFF450A0A))
                         "eghtesad-novin" -> listOf(Color(0xFF7E22CE), Color(0xFF581C87), Color(0xFF1E0A38))
                         "gardeshgari" -> listOf(Color(0xFF9F1239), Color(0xFF881337), Color(0xFF2E0814))
-                        "karafarin" -> listOf(Color(0xFF047857), Color(0xFF065F46), Color(0xFF022C20))
+                        "karafarin" -> listOf(Color(0xFFC2410C), Color(0xFF9A3412), Color(0xFF431407))
                         "sina" -> listOf(Color(0xFF1D4ED8), Color(0xFF1E3A8A), Color(0xFF0F172A))
                         "iran-zamin" -> listOf(Color(0xFF581C87), Color(0xFF4C1D95), Color(0xFF1E0A38))
-                        "khavar-mianeh" -> listOf(Color(0xFFC2410C), Color(0xFF9A3412), Color(0xFF3B1204))
+                        "khavar-mianeh" -> listOf(Color(0xFFEA580C), Color(0xFFC2410C), Color(0xFF7C2D12))
                         "dey" -> listOf(Color(0xFF0891B2), Color(0xFF0E7490), Color(0xFF164E63))
                         "sarmayeh" -> listOf(Color(0xFF334155), Color(0xFF1E293B), Color(0xFF0F172A))
                         else -> listOf(
@@ -384,10 +410,66 @@ private fun RealisticIranianBankCardItem(
                         center = Offset(w * 0.82f, h * 0.18f)
                     )
 
-                    // 3. Bank-Specific Artistic Curves & Signature Waves (طرح و نقش خطوط هماهنگ با بانک)
+                    // 3. Bank-Specific Artistic Curves & Signature Waves (طرح و نقش اختصاصی هر بانک برگرفته از تصاویر کاربر)
                     when (bankId) {
+                        "khavar-mianeh" -> {
+                            // Bankino / Middle East Bank: Top thick black magnetic band (~26%) + orange body + brushed lines
+                            drawRect(
+                                color = Color(0xFF111827),
+                                topLeft = Offset(0f, 0f),
+                                size = androidx.compose.ui.geometry.Size(w, h * 0.26f)
+                            )
+                            drawLine(
+                                color = Color(0xFFF97316),
+                                start = Offset(0f, h * 0.26f),
+                                end = Offset(w, h * 0.26f),
+                                strokeWidth = 1.6.dp.toPx()
+                            )
+                            for (i in 0..10) {
+                                val ly = h * 0.32f + (h * 0.60f / 10) * i
+                                drawLine(
+                                    color = Color.White.copy(alpha = 0.05f),
+                                    start = Offset(0f, ly),
+                                    end = Offset(w, ly),
+                                    strokeWidth = 1f
+                                )
+                            }
+                        }
+                        "saman" -> {
+                            // Saman Bank: Left vertical black magnetic stripe + Saman 8-petal sunburst flower watermark
+                            drawRect(
+                                color = Color(0xFF18181B),
+                                topLeft = Offset(0f, 0f),
+                                size = androidx.compose.ui.geometry.Size(w * 0.16f, h)
+                            )
+                            drawLine(
+                                color = Color(0xFFCA8A04),
+                                start = Offset(w * 0.16f, 0f),
+                                end = Offset(w * 0.16f, h),
+                                strokeWidth = 1.6.dp.toPx()
+                            )
+                            val cx = w * 0.85f
+                            val cy = h * 0.74f
+                            for (deg in 0 until 360 step 45) {
+                                val rad = Math.toRadians(deg.toDouble())
+                                val endX = cx + (w * 0.13f * kotlin.math.cos(rad)).toFloat()
+                                val endY = cy + (w * 0.13f * kotlin.math.sin(rad)).toFloat()
+                                drawLine(
+                                    color = Color(0xFF78350F).copy(alpha = 0.20f),
+                                    start = Offset(cx, cy),
+                                    end = Offset(endX, endY),
+                                    strokeWidth = 2.5.dp.toPx(),
+                                    cap = StrokeCap.Round
+                                )
+                            }
+                            drawCircle(
+                                color = Color(0xFF78350F).copy(alpha = 0.22f),
+                                radius = 5.dp.toPx(),
+                                center = Offset(cx, cy)
+                            )
+                        }
                         "pasargad" -> {
-                            // Pasargad Luxury 24K Gold Arcs & Subtle Gold Sheen
+                            // Pasargad Luxury 24K Gold Arcs + Row of Persepolis Lotus / Rosette Motifs along bottom
                             val goldWave1 = Path().apply {
                                 moveTo(0f, h * 0.42f)
                                 cubicTo(w * 0.35f, h * 0.30f, w * 0.65f, h * 0.55f, w, h * 0.38f)
@@ -405,21 +487,132 @@ private fun RealisticIranianBankCardItem(
                                     )
                                 )
                             )
-                            val goldWave2 = Path().apply {
-                                moveTo(0f, h * 0.72f)
-                                cubicTo(w * 0.45f, h * 0.60f, w * 0.75f, h * 0.85f, w, h * 0.70f)
+                            val flowerY = h * 0.89f
+                            val rosettes = 10
+                            val step = w / (rosettes + 1)
+                            for (i in 1..rosettes) {
+                                val fx = step * i
+                                drawCircle(
+                                    color = Color(0xFFFECC09).copy(alpha = 0.65f),
+                                    radius = 3.dp.toPx(),
+                                    center = Offset(fx, flowerY)
+                                )
+                                drawCircle(
+                                    color = Color(0xFFFECC09).copy(alpha = 0.30f),
+                                    radius = 5.dp.toPx(),
+                                    center = Offset(fx, flowerY),
+                                    style = Stroke(width = 1f)
+                                )
+                            }
+                        }
+                        "mellat" -> {
+                            // Mellat Anthracite Charcoal + Bronze/Copper metallic curves + QR code square bottom-left
+                            val mellatWave = Path().apply {
+                                moveTo(0f, h * 0.52f)
+                                quadraticBezierTo(w * 0.50f, h * 0.44f, w, h * 0.54f)
                             }
                             drawPath(
-                                path = goldWave2,
+                                path = mellatWave,
                                 brush = Brush.horizontalGradient(
-                                    listOf(
-                                        Color.Transparent,
-                                        Color(0xFFFECC09).copy(alpha = 0.45f),
-                                        Color(0xFFFBBF24).copy(alpha = 0.65f)
-                                    )
+                                    listOf(Color(0xFFF59E0B).copy(alpha = 0.50f), Color(0xFFD97706).copy(alpha = 0.40f))
                                 ),
-                                style = Stroke(width = 1.5.dp.toPx())
+                                style = Stroke(width = 1.8.dp.toPx())
                             )
+                            val qX = w * 0.08f
+                            val qY = h * 0.70f
+                            val qSize = 22.dp.toPx()
+                            drawRect(
+                                color = Color(0xFFF59E0B).copy(alpha = 0.70f),
+                                topLeft = Offset(qX, qY),
+                                size = androidx.compose.ui.geometry.Size(qSize, qSize),
+                                style = Stroke(width = 1.2.dp.toPx())
+                            )
+                            drawRect(
+                                color = Color(0xFFF59E0B).copy(alpha = 0.55f),
+                                topLeft = Offset(qX + 4.dp.toPx(), qY + 4.dp.toPx()),
+                                size = androidx.compose.ui.geometry.Size(qSize - 8.dp.toPx(), qSize - 8.dp.toPx())
+                            )
+                        }
+                        "sepah" -> {
+                            // Sepah: Slate top + fiery orange horizon ribbon + silver bottom with eslimi curves
+                            drawRect(
+                                brush = Brush.verticalGradient(listOf(Color(0xFFCBD5E1), Color(0xFF94A3B8))),
+                                topLeft = Offset(0f, h * 0.52f),
+                                size = androidx.compose.ui.geometry.Size(w, h * 0.48f)
+                            )
+                            val sepahRibbon = Path().apply {
+                                moveTo(0f, h * 0.49f)
+                                quadraticBezierTo(w * 0.50f, h * 0.43f, w, h * 0.49f)
+                                lineTo(w, h * 0.53f)
+                                quadraticBezierTo(w * 0.50f, h * 0.47f, 0f, h * 0.53f)
+                                close()
+                            }
+                            drawPath(
+                                path = sepahRibbon,
+                                brush = Brush.horizontalGradient(
+                                    listOf(Color(0xFFEA580C), Color(0xFFF97316), Color(0xFFFBBF24), Color(0xFFEA580C))
+                                )
+                            )
+                            for (r in 1..4) {
+                                for (c in 1..13) {
+                                    drawCircle(
+                                        color = Color.White.copy(alpha = 0.07f),
+                                        radius = 1.2.dp.toPx(),
+                                        center = Offset(w * 0.07f * c, h * 0.08f * r)
+                                    )
+                                }
+                            }
+                        }
+                        "mehr-iran" -> {
+                            // Mehr Iran: Emerald green + dark olive top band + girih geometric lattice watermark
+                            drawRect(
+                                color = Color(0xFF14532D),
+                                topLeft = Offset(0f, 0f),
+                                size = androidx.compose.ui.geometry.Size(w, h * 0.24f)
+                            )
+                            drawLine(
+                                color = Color(0xFFEAB308),
+                                start = Offset(0f, h * 0.24f),
+                                end = Offset(w, h * 0.24f),
+                                strokeWidth = 1.4.dp.toPx()
+                            )
+                            for (k in 1..4) {
+                                val diagX = w * 0.22f * k
+                                drawLine(
+                                    color = Color.White.copy(alpha = 0.08f),
+                                    start = Offset(diagX, h * 0.24f),
+                                    end = Offset(diagX - w * 0.25f, h),
+                                    strokeWidth = 1f
+                                )
+                                drawLine(
+                                    color = Color.White.copy(alpha = 0.08f),
+                                    start = Offset(diagX, h * 0.24f),
+                                    end = Offset(diagX + w * 0.25f, h),
+                                    strokeWidth = 1f
+                                )
+                            }
+                        }
+                        "karafarin" -> {
+                            // Karafarin: Terracotta coral + top black band + diamond watermark bottom-left
+                            drawRect(
+                                color = Color(0xFF18181B),
+                                topLeft = Offset(0f, 0f),
+                                size = androidx.compose.ui.geometry.Size(w, h * 0.24f)
+                            )
+                            drawLine(
+                                color = Color(0xFFEA580C),
+                                start = Offset(0f, h * 0.24f),
+                                end = Offset(w, h * 0.24f),
+                                strokeWidth = 1.4.dp.toPx()
+                            )
+                            val dPath = Path().apply {
+                                moveTo(w * 0.12f, h * 0.72f)
+                                lineTo(w * 0.16f, h * 0.65f)
+                                lineTo(w * 0.20f, h * 0.72f)
+                                lineTo(w * 0.16f, h * 0.79f)
+                                close()
+                            }
+                            drawPath(dPath, color = Color.White.copy(alpha = 0.16f), style = Stroke(width = 2.dp.toPx()))
                         }
                         "blu" -> {
                             // Blu Bank Neo-Bank Minimalist Cyber Waves
@@ -444,29 +637,6 @@ private fun RealisticIranianBankCardItem(
                                 center = Offset(w * 0.90f, h * 0.80f)
                             )
                         }
-                        "mellat" -> {
-                            // Mellat Ruby-Red Gold Sunburst Curve (subtle watermark)
-                            val mellatWave = Path().apply {
-                                moveTo(0f, h * 0.52f)
-                                quadraticBezierTo(w * 0.50f, h * 0.42f, w, h * 0.55f)
-                            }
-                            drawPath(
-                                path = mellatWave,
-                                brush = Brush.horizontalGradient(
-                                    listOf(
-                                        Color(0xFFFFC730).copy(alpha = 0.35f),
-                                        Color(0xFFFBBF24).copy(alpha = 0.40f),
-                                        Color(0xFFFFC730).copy(alpha = 0.30f)
-                                    )
-                                ),
-                                style = Stroke(width = 1.8.dp.toPx())
-                            )
-                            drawCircle(
-                                color = Color(0xFFFFC730).copy(alpha = 0.04f),
-                                radius = w * 0.48f,
-                                center = Offset(w * 0.85f, h * 0.45f)
-                            )
-                        }
                         "melli" -> {
                             // Melli Imperial Gold Flourish Waves (subtle watermark)
                             val melliWave = Path().apply {
@@ -483,64 +653,6 @@ private fun RealisticIranianBankCardItem(
                                     )
                                 ),
                                 style = Stroke(width = 1.6.dp.toPx())
-                            )
-                        }
-                        "saman" -> {
-                            // Saman Oceanic Wave Ripples
-                            val samanWave1 = Path().apply {
-                                moveTo(0f, h * 0.48f)
-                                cubicTo(w * 0.35f, h * 0.40f, w * 0.65f, h * 0.60f, w, h * 0.52f)
-                            }
-                            val samanWave2 = Path().apply {
-                                moveTo(0f, h * 0.56f)
-                                cubicTo(w * 0.35f, h * 0.48f, w * 0.65f, h * 0.68f, w, h * 0.60f)
-                            }
-                            drawPath(
-                                path = samanWave1,
-                                color = Color(0xFF7DCDF1).copy(alpha = 0.30f),
-                                style = Stroke(width = 1.6.dp.toPx())
-                            )
-                            drawPath(
-                                path = samanWave2,
-                                color = Color.White.copy(alpha = 0.20f),
-                                style = Stroke(width = 1.2.dp.toPx())
-                            )
-                        }
-                        "keshavarzi" -> {
-                            // Keshavarzi Harvest Wheat Curve
-                            val wheatCurve = Path().apply {
-                                moveTo(0f, h * 0.55f)
-                                quadraticBezierTo(w * 0.48f, h * 0.46f, w, h * 0.58f)
-                            }
-                            drawPath(
-                                path = wheatCurve,
-                                brush = Brush.horizontalGradient(
-                                    listOf(
-                                        Color(0xFFCA8A04).copy(alpha = 0.35f),
-                                        Color(0xFFFDE047).copy(alpha = 0.40f),
-                                        Color(0xFFCA8A04).copy(alpha = 0.35f)
-                                    )
-                                ),
-                                style = Stroke(width = 1.8.dp.toPx())
-                            )
-                        }
-                        "sepah" -> {
-                            // Sepah Flame-Orange Horizon Divider (subtle watermark)
-                            val sepahCurve = Path().apply {
-                                moveTo(0f, h * 0.50f + h * 0.04f)
-                                quadraticBezierTo(w * 0.5f, h * 0.50f - h * 0.07f, w, h * 0.50f + h * 0.04f)
-                            }
-                            drawPath(
-                                path = sepahCurve,
-                                brush = Brush.horizontalGradient(
-                                    listOf(
-                                        Color(0xFFEA580C).copy(alpha = 0.35f),
-                                        Color(0xFFF97316).copy(alpha = 0.40f),
-                                        Color(0xFFFBBF24).copy(alpha = 0.35f),
-                                        Color(0xFFEA580C).copy(alpha = 0.35f)
-                                    )
-                                ),
-                                style = Stroke(width = 2.0.dp.toPx())
                             )
                         }
                         else -> {
@@ -675,7 +787,7 @@ private fun RealisticIranianBankCardItem(
                                     text = bankInfo?.persianName ?: account.bankName.ifBlank { account.name },
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White,
+                                    color = if (isLightCard) Color(0xFF18181B) else Color.White,
                                     maxLines = 1
                                 )
                                 Text(
@@ -683,16 +795,16 @@ private fun RealisticIranianBankCardItem(
                                     fontSize = 9.5.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     letterSpacing = 0.8.sp,
-                                    color = Color.White.copy(alpha = 0.85f)
+                                    color = if (isLightCard) Color(0xFF3F3F46) else Color.White.copy(alpha = 0.85f)
                                 )
                             }
                         }
 
                         // Left side (in RTL): Classic "کارت نقدی / Debit Card" badge
-                        DebitCardShetabBadge()
+                        DebitCardShetabBadge(textColor = if (isLightCard) Color(0xFF18181B) else Color.White)
                     }
 
-                    // 2. UPPER-CENTER: Account Number + Sheba (IR...) in Frosted Capsule
+                    // 2. UPPER-CENTER: Account Number + Sheba (IR...) in High-Contrast Shielded Capsule
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -723,15 +835,20 @@ private fun RealisticIranianBankCardItem(
                             Spacer(modifier = Modifier.height(10.dp))
                         }
 
-                        // Sheba Number in opaque high-contrast shielded capsule (tappable to copy)
+                        // Sheba Number in opaque high-contrast shielded capsule (always displayed on card so user can view & copy)
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = Color(0xF2080E1C),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)),
-                            shadowElevation = 4.dp,
+                            color = if (isLightCard) Color(0xF818181B) else Color(0xF80A0F1D),
+                            border = BorderStroke(
+                                1.2.dp,
+                                if (bankId == "pasargad") Color(0xFFFECC09)
+                                else if (bankId == "mellat") Color(0xFFF59E0B)
+                                else horizonAccentColor.copy(alpha = 0.90f)
+                            ),
+                            shadowElevation = 5.dp,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable { onCopyField("شماره شبا", normalizedSheba) }
+                                .clickable { onCopyField("شماره شبا", displaySheba) }
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.5.dp),
@@ -742,17 +859,17 @@ private fun RealisticIranianBankCardItem(
                                     text = "شبا: ",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFFFBBF24)
+                                    color = if (bankId == "pasargad") Color(0xFFFECC09) else Color(0xFFFBBF24)
                                 )
                                 Text(
-                                    text = if (normalizedSheba.isBlank()) "IR--------------------------"
-                                    else PersianNumberFormatter.formatDigits(normalizedSheba, currency),
+                                    text = if (displaySheba.isNotBlank()) PersianNumberFormatter.formatDigits(displaySheba, currency)
+                                    else "IR - - - - - - - - - - - - - - - - - - - - - -",
                                     style = MaterialTheme.typography.labelMedium.copy(
                                         textDirection = TextDirection.Ltr,
-                                        letterSpacing = 0.8.sp
+                                        letterSpacing = 0.9.sp
                                     ),
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White,
+                                    color = if (displaySheba.isNotBlank()) Color.White else Color.White.copy(alpha = 0.65f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -775,7 +892,7 @@ private fun RealisticIranianBankCardItem(
                                 textDirection = TextDirection.Ltr
                             ),
                             fontWeight = FontWeight.ExtraBold,
-                            color = if (bankInfo?.id == "pasargad") Color(0xFFFEF08A) else Color.White,
+                            color = cardTextColor,
                             textAlign = TextAlign.Center,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -789,7 +906,7 @@ private fun RealisticIranianBankCardItem(
                             text = account.cardHolderName.ifBlank { account.name },
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color.White.copy(alpha = 0.95f),
+                            color = cardSubtextColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier
@@ -832,7 +949,7 @@ private fun RealisticIranianBankCardItem(
                                     text = "تاریخ انقضا:",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White.copy(alpha = 0.90f)
+                                    color = if (isLightCard) Color(0xFF18181B) else Color.White.copy(alpha = 0.90f)
                                 )
                                 CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) {
                                     Row(
@@ -841,8 +958,8 @@ private fun RealisticIranianBankCardItem(
                                     ) {
                                         Surface(
                                             shape = RoundedCornerShape(5.dp),
-                                            color = Color.White.copy(alpha = 0.20f),
-                                            border = BorderStroke(0.8.dp, Color.White.copy(alpha = 0.35f))
+                                            color = if (isLightCard) Color(0x1F000000) else Color.White.copy(alpha = 0.20f),
+                                            border = BorderStroke(0.8.dp, if (isLightCard) Color(0x44000000) else Color.White.copy(alpha = 0.35f))
                                         ) {
                                             Text(
                                                 text = if (expYear.isBlank()) "--"
@@ -851,14 +968,14 @@ private fun RealisticIranianBankCardItem(
                                                     textDirection = TextDirection.Ltr
                                                 ),
                                                 fontWeight = FontWeight.ExtraBold,
-                                                color = Color.White,
+                                                color = cardTextColor,
                                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                             )
                                         }
                                         Surface(
                                             shape = RoundedCornerShape(5.dp),
-                                            color = Color.White.copy(alpha = 0.20f),
-                                            border = BorderStroke(0.8.dp, Color.White.copy(alpha = 0.35f))
+                                            color = if (isLightCard) Color(0x1F000000) else Color.White.copy(alpha = 0.20f),
+                                            border = BorderStroke(0.8.dp, if (isLightCard) Color(0x44000000) else Color.White.copy(alpha = 0.35f))
                                         ) {
                                             Text(
                                                 text = if (expMonth.isBlank()) "--"
@@ -867,7 +984,7 @@ private fun RealisticIranianBankCardItem(
                                                     textDirection = TextDirection.Ltr
                                                 ),
                                                 fontWeight = FontWeight.ExtraBold,
-                                                color = Color.White,
+                                                color = cardTextColor,
                                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                             )
                                         }
@@ -878,8 +995,8 @@ private fun RealisticIranianBankCardItem(
                             // Left side in RTL: CVV2 in Frosted Capsule
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
-                                color = Color.White.copy(alpha = 0.20f),
-                                border = BorderStroke(0.8.dp, Color.White.copy(alpha = 0.35f)),
+                                color = if (isLightCard) Color(0x1F000000) else Color.White.copy(alpha = 0.20f),
+                                border = BorderStroke(0.8.dp, if (isLightCard) Color(0x44000000) else Color.White.copy(alpha = 0.35f)),
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
                                     .clickable { onCopyField("CVV2", account.cvv2) }
@@ -894,7 +1011,7 @@ private fun RealisticIranianBankCardItem(
                                             textDirection = TextDirection.Ltr
                                         ),
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = horizonAccentColor
+                                        color = if (isLightCard) Color(0xFFB45309) else horizonAccentColor
                                     )
                                     Text(
                                         text = if (account.cvv2.isBlank()) "---"
@@ -903,7 +1020,7 @@ private fun RealisticIranianBankCardItem(
                                             textDirection = TextDirection.Ltr
                                         ),
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = Color.White
+                                        color = cardTextColor
                                     )
                                 }
                             }
@@ -954,7 +1071,7 @@ private fun RealisticIranianBankCardItem(
                                 append("بانک: ${account.bankName.ifBlank { account.name }}\n")
                                 if (account.cardHolderName.isNotBlank()) append("صاحب کارت: ${account.cardHolderName}\n")
                                 if (account.cardNumber.isNotBlank()) append("شماره کارت: ${account.cardNumber}\n")
-                                if (normalizedSheba.isNotBlank()) append("شبا: $normalizedSheba\n")
+                                if (displaySheba.isNotBlank()) append("شبا: $displaySheba\n")
                                 if (account.accountNumber.isNotBlank()) append("شماره حساب: ${account.accountNumber}\n")
                                 if (account.cvv2.isNotBlank()) append("CVV2: ${account.cvv2}\n")
                                 if (account.expiryDate.isNotBlank()) append("انقضا: ${account.expiryDate}")
@@ -1062,6 +1179,7 @@ fun AddOrEditBankCardDialog(
             val combinedExpiry = if (expiryYear.isNotBlank() || expiryMonth.isNotBlank()) {
                 "${expiryYear.trim().padStart(2, '0')} ${expiryMonth.trim().padStart(2, '0')}".trim()
             } else ""
+            val finalSheba = shebaNumber.trim()
             val entity = (initialAccount ?: AccountEntity(name = finalName, type = AccountType.BANK_CARD)).copy(
                 name = finalName,
                 bankName = finalBank,
@@ -1069,7 +1187,7 @@ fun AddOrEditBankCardDialog(
                 cardNumber = cardNumber.trim(),
                 cvv2 = cvv2.trim(),
                 expiryDate = combinedExpiry,
-                shebaNumber = shebaNumber.trim(),
+                shebaNumber = finalSheba,
                 accountNumber = accountNumber.trim(),
                 cardOrAccountDescription = description.trim(),
                 balance = finalBalance,

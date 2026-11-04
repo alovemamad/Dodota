@@ -46,6 +46,7 @@ sealed class Screen(val route: String) {
     object Reminders : Screen("reminders")
     object Checklists : Screen("checklists")
     object Bahesab : Screen("bahesab")
+    object ChandRooz : Screen("chand_rooz")
     object BackupRestore : Screen("backup_restore")
     object Trash : Screen("trash")
     object Settings : Screen("settings")

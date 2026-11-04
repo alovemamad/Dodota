@@ -451,3 +451,31 @@ interface ChecklistDao {
     suspend fun insertAllChecklistItems(list: List<ChecklistItemEntity>)
 }
 
+@Dao
+interface ChandRoozDao {
+    @Query("SELECT * FROM chand_rooz_records ORDER BY startDateMillis DESC, id DESC")
+    fun getAllRecords(): Flow<List<ChandRoozRecordEntity>>
+
+    @Query("SELECT * FROM chand_rooz_records ORDER BY startDateMillis DESC")
+    suspend fun getAllRecordsSync(): List<ChandRoozRecordEntity>
+
+    @Query("SELECT * FROM chand_rooz_records WHERE category = :category ORDER BY startDateMillis DESC")
+    fun getRecordsByCategory(category: ChandRoozCategory): Flow<List<ChandRoozRecordEntity>>
+
+    @Query("SELECT * FROM chand_rooz_records WHERE id = :id")
+    suspend fun getRecordById(id: Long): ChandRoozRecordEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRecord(record: ChandRoozRecordEntity): Long
+
+    @Update
+    suspend fun updateRecord(record: ChandRoozRecordEntity)
+
+    @Delete
+    suspend fun deleteRecord(record: ChandRoozRecordEntity)
+
+    @Query("DELETE FROM chand_rooz_records")
+    suspend fun clearAll()
+}
+
+

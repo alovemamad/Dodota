@@ -20,6 +20,7 @@ class DodotaRepository(private val db: DodotaDatabase) {
     private val budgetDao = db.budgetDao()
     private val goalDao = db.goalDao()
     private val assetDao = db.assetDao()
+    private val chandRoozDao = db.chandRoozDao()
 
     // ----------------------------------------------------
     // ACCOUNTS
@@ -613,6 +614,25 @@ class DodotaRepository(private val db: DodotaDatabase) {
         }
     }
 
+    // ----------------------------------------------------
+    // CHAND ROOZ (CHICHI PLUS)
+    // ----------------------------------------------------
+    val allChandRoozRecords: Flow<List<ChandRoozRecordEntity>> = chandRoozDao.getAllRecords()
+
+    fun getChandRoozRecordsByCategory(category: ChandRoozCategory): Flow<List<ChandRoozRecordEntity>> =
+        chandRoozDao.getRecordsByCategory(category)
+
+    suspend fun getChandRoozRecord(id: Long): ChandRoozRecordEntity? = chandRoozDao.getRecordById(id)
+
+    suspend fun insertChandRoozRecord(record: ChandRoozRecordEntity): Long =
+        chandRoozDao.insertRecord(record)
+
+    suspend fun updateChandRoozRecord(record: ChandRoozRecordEntity) =
+        chandRoozDao.updateRecord(record)
+
+    suspend fun deleteChandRoozRecord(record: ChandRoozRecordEntity) =
+        chandRoozDao.deleteRecord(record)
+
     // Reset database completely
     suspend fun clearDatabase() {
         db.withTransaction {
@@ -630,6 +650,8 @@ class DodotaRepository(private val db: DodotaDatabase) {
             assetDao.clearAll()
             checklistDao.clearAllChecklists()
             checklistDao.clearAllChecklistItems()
+            chandRoozDao.clearAll()
         }
     }
 }
+

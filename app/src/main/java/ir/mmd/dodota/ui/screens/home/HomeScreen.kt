@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -23,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,6 +58,7 @@ fun HomeScreen(
     onNavigateToChecklists: () -> Unit,
     onNavigateToChecks: () -> Unit = {},
     onNavigateToBahesab: () -> Unit = {},
+    onNavigateToChandRooz: () -> Unit = {},
     onToggleBalanceVisibility: () -> Unit = {}
 ) {
     val isBalanceVisible = !userPreferences.isBalanceHidden
@@ -677,6 +680,20 @@ fun HomeScreen(
                                 onClick = onNavigateToBahesab,
                                 modifier = Modifier.weight(1f)
                             )
+                        }
+                        if (userPreferences.isChichiPlusEnabled) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                ToolChip(
+                                    title = "چندروز؟",
+                                    icon = Icons.Default.DateRange,
+                                    color = primaryTone,
+                                    onClick = onNavigateToChandRooz,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 }

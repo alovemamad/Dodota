@@ -58,6 +58,7 @@ import ir.mmd.dodota.ui.screens.backup.BackupRestoreScreen
 import ir.mmd.dodota.ui.screens.budgets.BudgetsScreen
 import ir.mmd.dodota.ui.screens.calendar.FinancialCalendarScreen
 import ir.mmd.dodota.ui.screens.checklist.ChecklistsScreen
+import ir.mmd.dodota.ui.screens.chichi.ChandRoozScreen
 import ir.mmd.dodota.ui.screens.debts.ChecksScreen
 import ir.mmd.dodota.ui.screens.debts.DebtDetailScreen
 import ir.mmd.dodota.ui.screens.debts.DebtsScreen
@@ -623,6 +624,9 @@ fun DodotaApp(
                     onNavigateToBahesab = {
                         navController.navigate(Screen.Bahesab.route)
                     },
+                    onNavigateToChandRooz = {
+                        navController.navigate(Screen.ChandRooz.route)
+                    },
                     onToggleBalanceVisibility = {
                         coroutineScope.launch {
                             preferencesRepo.setBalanceHidden(!userPreferences.isBalanceHidden)
@@ -891,6 +895,15 @@ fun DodotaApp(
             // Bahesab (وام و سپرده)
             composable(Screen.Bahesab.route) {
                 BahesabScreen(
+                    userPreferences = userPreferences,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            // Chand Rooz (Chichi Plus)
+            composable(Screen.ChandRooz.route) {
+                ChandRoozScreen(
+                    repository = repository,
                     userPreferences = userPreferences,
                     onBack = { navController.popBackStack() }
                 )

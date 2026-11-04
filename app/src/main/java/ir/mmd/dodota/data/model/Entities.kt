@@ -213,3 +213,32 @@ data class ChecklistItemEntity(
     val transactionId: Long? = null,
     val createdAtMillis: Long = System.currentTimeMillis()
 )
+
+enum class ChandRoozCategory(
+    val title: String,
+    val iconName: String,
+    val defaultColorHex: String
+) {
+    MISSION("ماموریت", "flight", "#2563EB"),
+    LEAVE("مرخصی", "beach_access", "#10B981"),
+    SICK_LEAVE("استعلاجی", "medical_services", "#EF4444"),
+    BANK("بانک", "account_balance", "#F59E0B"),
+    OTHER("سایر موارد", "edit_note", "#8B5CF6")
+}
+
+@Entity(tableName = "chand_rooz_records")
+data class ChandRoozRecordEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val title: String,
+    val category: ChandRoozCategory = ChandRoozCategory.MISSION,
+    val isRange: Boolean = false,
+    val startDateMillis: Long = System.currentTimeMillis(),
+    val endDateMillis: Long = System.currentTimeMillis(),
+    val daysCount: Int = 1,
+    val location: String = "",
+    val note: String = "",
+    val colorHex: String = "#3B82F6",
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    val customCategory: String = ""
+)
+

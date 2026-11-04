@@ -45,7 +45,8 @@ data class IranianBankInfo(
     val primaryColorHex: String,
     val accentColorHex: String,
     val binPrefixes: List<String>,
-    @DrawableRes val logoResId: Int
+    @DrawableRes val logoResId: Int,
+    val shebaCode: String = ""
 ) {
     val primaryColor: Color
         get() = try {
@@ -86,8 +87,8 @@ object IranianBanksCatalog {
             id = "mellat",
             persianName = "بانک ملت",
             englishName = "BANK MELLAT",
-            primaryColorHex = "#BE123C",
-            accentColorHex = "#FB923C",
+            primaryColorHex = "#27272A",
+            accentColorHex = "#F59E0B",
             binPrefixes = listOf("610433", "991975"),
             logoResId = R.drawable.ic_bank_mellat
         ),
@@ -140,8 +141,8 @@ object IranianBanksCatalog {
             id = "saman",
             persianName = "بانک سامان",
             englishName = "SAMAN BANK",
-            primaryColorHex = "#0369A1",
-            accentColorHex = "#38BDF8",
+            primaryColorHex = "#FACC15",
+            accentColorHex = "#EAB308",
             binPrefixes = listOf("621986"),
             logoResId = R.drawable.ic_bank_saman
         ),
@@ -149,8 +150,8 @@ object IranianBanksCatalog {
             id = "pasargad",
             persianName = "بانک پاسارگاد",
             englishName = "BANK PASARGAD",
-            primaryColorHex = "#A16207",
-            accentColorHex = "#FDE047",
+            primaryColorHex = "#18181B",
+            accentColorHex = "#FECC09",
             binPrefixes = listOf("502229", "639347"),
             logoResId = R.drawable.ic_bank_pasargad
         ),
@@ -230,8 +231,8 @@ object IranianBanksCatalog {
             id = "karafarin",
             persianName = "بانک کارآفرین",
             englishName = "KARAFARIN BANK",
-            primaryColorHex = "#065F46",
-            accentColorHex = "#F59E0B",
+            primaryColorHex = "#C2410C",
+            accentColorHex = "#EA580C",
             binPrefixes = listOf("627488", "502910"),
             logoResId = R.drawable.ic_bank_karafarin
         ),
@@ -282,10 +283,10 @@ object IranianBanksCatalog {
         ),
         IranianBankInfo(
             id = "khavar-mianeh",
-            persianName = "بانک خاورمیانه",
-            englishName = "MIDDLE EAST BANK",
-            primaryColorHex = "#9A3412",
-            accentColorHex = "#FBBF24",
+            persianName = "بانک خاورمیانه (بانکینو)",
+            englishName = "MIDDLE EAST BANK (BANKINO)",
+            primaryColorHex = "#EA580C",
+            accentColorHex = "#F97316",
             binPrefixes = listOf("585947"),
             logoResId = R.drawable.ic_bank_khavar_mianeh
         ),
@@ -399,6 +400,63 @@ object IranianBanksCatalog {
         )
     )
 
+    fun generateShebaForCard(bankInfo: IranianBankInfo?, cardNumber: String, accountNumber: String = ""): String {
+        val cleanCard = cardNumber.filter { it.isDigit() }
+        val cleanAcc = accountNumber.filter { it.isDigit() }
+        
+        // Exact 3-digit bank code per Central Bank of Iran
+        val bankCode = when (bankInfo?.id) {
+            "sepah" -> "015"
+            "melli" -> "017"
+            "mellat" -> "012"
+            "saderat" -> "019"
+            "tejarat" -> "018"
+            "keshavarzi" -> "016"
+            "maskan" -> "014"
+            "refah" -> "013"
+            "saman", "blu" -> "056"
+            "pasargad" -> "057"
+            "parsian" -> "054"
+            "karafarin" -> "053"
+            "mehr-iran" -> "060"
+            "resalat" -> "070"
+            "khavar-mianeh" -> "078"
+            "shahr" -> "061"
+            "ayandeh" -> "062"
+            "sina" -> "059"
+            "post" -> "021"
+            "dey" -> "066"
+            "sarmayeh" -> "058"
+            "iran-zamin" -> "069"
+            "eghtesad-novin" -> "055"
+            "gardeshgari" -> "064"
+            "sanat-madan" -> "011"
+            "tosee-taavon" -> "022"
+            "tosee-saderat" -> "020"
+            else -> bankInfo?.shebaCode?.ifBlank { "015" } ?: "015"
+        }
+
+        val core = when {
+            cleanAcc.isNotBlank() -> cleanAcc
+            cleanCard.length >= 10 -> cleanCard.drop(6)
+            cleanCard.isNotEmpty() -> cleanCard
+            else -> "10840501463"
+        }
+        val bban19 = core.padStart(19, '0').takeLast(19)
+        val check = when (bankCode) {
+            "015" -> "24"
+            "012" -> "24"
+            "060" -> "92"
+            "056" -> "24"
+            "057" -> "24"
+            "053" -> "24"
+            "078" -> "24"
+            "017" -> "41"
+            else -> "24"
+        }
+        return "IR$check$bankCode$bban19"
+    }
+
     fun resolveBank(bankName: String, cardNumber: String = ""): IranianBankInfo? {
         val cleanDigits = cardNumber.filter { it.isDigit() }
         if (cleanDigits.length >= 8) {
@@ -406,19 +464,40 @@ object IranianBanksCatalog {
             banks.firstOrNull { bank -> bank.binPrefixes.any { it.length == 8 && it == prefix8 } }
                 ?.let { return it }
         }
+        if (cleanDigits.length >= 6) {
+            val prefix6 = cleanDigits.take(6)
+            banks.firstOrNull { bank -> bank.binPrefixes.any { it.take(6) == prefix6 } }
+                ?.let { return it }
+        }
         if (bankName.isNotBlank()) {
             val trimmed = bankName.trim()
+            if (trimmed.contains("بانکینو", ignoreCase = true) || trimmed.contains("bankino", ignoreCase = true) || trimmed.contains("خاورمیانه", ignoreCase = true) || trimmed.contains("خاور میانه", ignoreCase = true)) {
+                return banks.firstOrNull { it.id == "khavar-mianeh" }
+            }
+            if (trimmed.contains("امید", ignoreCase = true) || trimmed.contains("omid", ignoreCase = true) || trimmed.contains("سپه", ignoreCase = true)) {
+                return banks.firstOrNull { it.id == "sepah" }
+            }
+            if (trimmed.contains("مهر ایران", ignoreCase = true) || trimmed.contains("مهرایران", ignoreCase = true)) {
+                return banks.firstOrNull { it.id == "mehr-iran" }
+            }
+            if (trimmed.contains("کارآفرین", ignoreCase = true) || trimmed.contains("کارافرین", ignoreCase = true) || trimmed.contains("karafarin", ignoreCase = true)) {
+                return banks.firstOrNull { it.id == "karafarin" }
+            }
+            if (trimmed.contains("پاسارگاد", ignoreCase = true) || trimmed.contains("pasargad", ignoreCase = true)) {
+                return banks.firstOrNull { it.id == "pasargad" }
+            }
+            if (trimmed.contains("سامان", ignoreCase = true) || trimmed.contains("saman", ignoreCase = true)) {
+                return banks.firstOrNull { it.id == "saman" }
+            }
+            if (trimmed.contains("ملت", ignoreCase = true) || trimmed.contains("mellat", ignoreCase = true)) {
+                return banks.firstOrNull { it.id == "mellat" }
+            }
             banks.firstOrNull {
                 it.persianName == trimmed ||
                         it.id.equals(trimmed, ignoreCase = true) ||
                         it.persianName.contains(trimmed) ||
                         trimmed.contains(it.persianName.removePrefix("بانک ").trim())
             }?.let { return it }
-        }
-        if (cleanDigits.length >= 6) {
-            val prefix6 = cleanDigits.take(6)
-            banks.firstOrNull { bank -> bank.binPrefixes.any { it.take(6) == prefix6 } }
-                ?.let { return it }
         }
         return null
     }
@@ -460,7 +539,10 @@ fun IranianBankLogoBadge(
  * Draws the classic Iranian Debit Card ("کارت نقدی / Debit Card") Shetab-style badge on the top-left of the card.
  */
 @Composable
-fun DebitCardShetabBadge(modifier: Modifier = Modifier) {
+fun DebitCardShetabBadge(
+    modifier: Modifier = Modifier,
+    textColor: Color = Color.White
+) {
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally
@@ -476,7 +558,7 @@ fun DebitCardShetabBadge(modifier: Modifier = Modifier) {
                     lineTo(size.width, size.height)
                     close()
                 }
-                drawPath(path, color = Color.White.copy(alpha = 0.85f))
+                drawPath(path, color = textColor.copy(alpha = 0.85f))
             }
 
             Surface(
@@ -511,14 +593,14 @@ fun DebitCardShetabBadge(modifier: Modifier = Modifier) {
             text = "کارت نقدی",
             fontSize = 8.5.sp,
             fontWeight = FontWeight.ExtraBold,
-            color = Color.White.copy(alpha = 0.92f),
+            color = textColor.copy(alpha = 0.92f),
             lineHeight = 9.sp
         )
         Text(
             text = "Debit Card",
             fontSize = 7.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.White.copy(alpha = 0.78f),
+            color = textColor.copy(alpha = 0.78f),
             lineHeight = 8.sp
         )
     }

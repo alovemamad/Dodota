@@ -25,9 +25,10 @@ import kotlinx.coroutines.launch
         FinancialGoalEntity::class,
         AssetEntity::class,
         ChecklistEntity::class,
-        ChecklistItemEntity::class
+        ChecklistItemEntity::class,
+        ChandRoozRecordEntity::class
     ],
-    version = 7,
+    version = 9,
     exportSchema = false
 )
 abstract class DodotaDatabase : RoomDatabase() {
@@ -43,6 +44,7 @@ abstract class DodotaDatabase : RoomDatabase() {
     abstract fun goalDao(): GoalDao
     abstract fun assetDao(): AssetDao
     abstract fun checklistDao(): ChecklistDao
+    abstract fun chandRoozDao(): ChandRoozDao
 
     companion object {
         @Volatile
@@ -140,6 +142,34 @@ abstract class DodotaDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `chand_rooz_records` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `category` TEXT NOT NULL,
+                        `isRange` INTEGER NOT NULL,
+                        `startDateMillis` INTEGER NOT NULL,
+                        `endDateMillis` INTEGER NOT NULL,
+                        `daysCount` INTEGER NOT NULL,
+                        `location` TEXT NOT NULL,
+                        `note` TEXT NOT NULL,
+                        `colorHex` TEXT NOT NULL,
+                        `createdAtMillis` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        private val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                addColumnIfNotExists(db, "chand_rooz_records", "customCategory", "TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun getDatabase(context: Context): DodotaDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -147,7 +177,7 @@ abstract class DodotaDatabase : RoomDatabase() {
                     DodotaDatabase::class.java,
                     "dodota_finance.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .fallbackToDestructiveMigration(true)
                     .fallbackToDestructiveMigrationOnDowngrade(true)
                     .addCallback(DatabaseCallback(context))

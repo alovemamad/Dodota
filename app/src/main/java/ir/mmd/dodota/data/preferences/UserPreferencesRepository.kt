@@ -28,7 +28,8 @@ data class UserPreferences(
     val isWeeklyBackupEnabled: Boolean = true,
     val lastBackupMillis: Long = 0L,
     val isOnboardingCompleted: Boolean = false,
-    val isBalanceHidden: Boolean = false
+    val isBalanceHidden: Boolean = false,
+    val isChichiPlusEnabled: Boolean = false
 ) {
     val isPinEnabled: Boolean get() = isAppLockEnabled && pinHash.isNotBlank()
     val colorTheme: AppThemeMode get() = themeMode
@@ -52,6 +53,7 @@ class UserPreferencesRepository(private val context: Context) {
         val LAST_BACKUP_MILLIS = longPreferencesKey("last_backup_millis")
         val IS_ONBOARDING_COMPLETED = booleanPreferencesKey("is_onboarding_completed")
         val IS_BALANCE_HIDDEN = booleanPreferencesKey("is_balance_hidden")
+        val IS_CHICHI_PLUS_ENABLED = booleanPreferencesKey("is_chichi_plus_enabled")
     }
 
     val userPreferencesFlow: Flow<UserPreferences> = dataStore.data
@@ -94,9 +96,16 @@ class UserPreferencesRepository(private val context: Context) {
                 isWeeklyBackupEnabled = preferences[PreferencesKeys.IS_WEEKLY_BACKUP_ENABLED] ?: true,
                 lastBackupMillis = preferences[PreferencesKeys.LAST_BACKUP_MILLIS] ?: 0L,
                 isOnboardingCompleted = preferences[PreferencesKeys.IS_ONBOARDING_COMPLETED] ?: false,
-                isBalanceHidden = preferences[PreferencesKeys.IS_BALANCE_HIDDEN] ?: false
+                isBalanceHidden = preferences[PreferencesKeys.IS_BALANCE_HIDDEN] ?: false,
+                isChichiPlusEnabled = preferences[PreferencesKeys.IS_CHICHI_PLUS_ENABLED] ?: false
             )
         }
+
+    suspend fun setChichiPlusEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.IS_CHICHI_PLUS_ENABLED] = enabled
+        }
+    }
 
     suspend fun setBalanceHidden(hidden: Boolean) {
         dataStore.edit { preferences ->

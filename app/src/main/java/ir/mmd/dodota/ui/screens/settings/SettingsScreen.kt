@@ -145,6 +145,47 @@ fun SettingsScreen(
                 )
             }
 
+            // Chichi Plus Section
+            item {
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "چی‌چی پلاس (قابلیت‌های هوشمند)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = "جدید",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+
+            item {
+                SettingsSwitchCard(
+                    icon = Icons.Outlined.DateRange,
+                    title = "چی‌چی پلاس",
+                    subtitle = "فعال‌سازی ماژول «چندروز؟» در داشبورد برای ثبت و شمارش روزهای ماموریت، مرخصی و فعالیت‌ها",
+                    checked = userPreferences.isChichiPlusEnabled,
+                    onCheckedChange = { isChecked ->
+                        coroutineScope.launch {
+                            preferencesRepo.setChichiPlusEnabled(isChecked)
+                        }
+                    },
+                    testTag = "settings_chichi_plus_switch"
+                )
+            }
+
             // Data & Storage Section
             item {
                 Spacer(modifier = Modifier.height(6.dp))
@@ -968,3 +1009,74 @@ fun SettingsItemCard(
         }
     }
 }
+
+@Composable
+fun SettingsSwitchCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    testTag: String? = null
+) {
+    GlassCard(
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .let { if (testTag != null) it.testTag(testTag) else it },
+        onClick = { onCheckedChange(!checked) }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                            )
+                        )
+                    )
+                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                if (subtitle.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                modifier = Modifier.testTag(if (testTag != null) "${testTag}_switch" else "settings_switch")
+            )
+        }
+    }
+}
+
