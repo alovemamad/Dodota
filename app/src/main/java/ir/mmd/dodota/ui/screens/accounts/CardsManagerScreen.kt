@@ -35,11 +35,15 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ir.mmd.dodota.data.model.AccountEntity
@@ -232,11 +236,10 @@ private fun copyToClipboard(context: Context, label: String, value: String) {
     Toast.makeText(context, "$label کپی شد", Toast.LENGTH_SHORT).show()
 }
 
-private fun formatCardNumberGroups(raw: String, useEnglish: Boolean): String {
+private fun formatCardNumberGroups(raw: String): String {
     val clean = PersianNumberFormatter.toEnglishDigits(raw).filter { it.isDigit() }.take(16)
     if (clean.isEmpty()) return "----   ----   ----   ----"
-    val grouped = clean.chunked(4).joinToString("   ")
-    return PersianNumberFormatter.formatDigits(grouped, useEnglish)
+    return clean.chunked(4).joinToString("   ")
 }
 
 private fun parseExpiryYearAndMonth(raw: String): Pair<String, String> {
@@ -289,7 +292,7 @@ private fun RealisticIranianBankCardItem(
     val isOmidBank = remember(account.bankName, account.name) {
         account.bankName.contains("امید", ignoreCase = true) || account.name.contains("امید", ignoreCase = true)
     }
-    val isLightCard = bankId == "saman" || isOmidBank || bankId == "mehr-iran"
+    val isLightCard = bankId == "saman" || isOmidBank || bankId == "mehr-iran" || bankId == "sepah"
 
     val baseColor = remember(account.colorHex, bankInfo) {
         bankInfo?.primaryColor ?: try {
@@ -311,20 +314,45 @@ private fun RealisticIranianBankCardItem(
 
     // High-contrast typography palette per bank style
     val cardTextColor = when {
-        bankId == "saman" -> Color(0xFF18181B)
         bankId == "pasargad" -> Color(0xFFFECC09)
         bankId == "mellat" -> Color(0xFFF59E0B)
-        bankId == "mehr-iran" -> Color(0xFF14290F)
-        isOmidBank -> Color(0xFF1E293B)
+        bankId == "saman" -> Color(0xFF18181B)
+        bankId == "mehr-iran" -> Color(0xFF0F240C)
+        bankId == "sepah" -> Color(0xFF0F172A)
+        isOmidBank -> Color(0xFF0F172A)
+        isLightCard -> Color(0xFF18181B)
         else -> Color.White
     }
-    val cardSubtextColor = when {
-        bankId == "saman" -> Color(0xFF27272A)
-        bankId == "pasargad" -> Color(0xFFFDE047)
+    val cardShebaColor = when {
+        bankId == "pasargad" -> Color(0xFFFECC09)
         bankId == "mellat" -> Color(0xFFFBBF24)
+        bankId == "mehr-iran" -> Color(0xFF0F240C)
+        bankId == "sepah" -> Color(0xFF0F172A)
+        isLightCard -> Color(0xFF18181B)
+        else -> Color.White.copy(alpha = 0.95f)
+    }
+    val cardSubtextColor = when {
+        bankId == "pasargad" -> Color(0xFFFDE047)
+        bankId == "mellat" -> Color(0xFFFDE68A)
         bankId == "mehr-iran" -> Color(0xFF1E3A15)
-        isOmidBank -> Color(0xFF334155)
-        else -> Color.White.copy(alpha = 0.88f)
+        bankId == "sepah" -> Color(0xFF334155)
+        isLightCard -> Color(0xFF3F3F46)
+        else -> Color.White.copy(alpha = 0.85f)
+    }
+    val cardEmbossShadow = if (isLightCard) {
+        null
+    } else if (bankId == "pasargad" || bankId == "mellat") {
+        Shadow(
+            color = Color.Black.copy(alpha = 0.85f),
+            offset = Offset(1.5f, 2f),
+            blurRadius = 3f
+        )
+    } else {
+        Shadow(
+            color = Color.Black.copy(alpha = 0.70f),
+            offset = Offset(1f, 1.5f),
+            blurRadius = 2.5f
+        )
     }
 
     Column(
@@ -472,131 +500,88 @@ private fun RealisticIranianBankCardItem(
                             )
                         }
                         "pasargad" -> {
-                            // Pasargad Luxury 24K Gold Arcs + Row of Persepolis Lotus / Rosette Motifs along bottom
-                            val goldWave1 = Path().apply {
-                                moveTo(0f, h * 0.42f)
-                                cubicTo(w * 0.35f, h * 0.30f, w * 0.65f, h * 0.55f, w, h * 0.38f)
-                                lineTo(w, h * 0.42f)
-                                cubicTo(w * 0.65f, h * 0.59f, w * 0.35f, h * 0.34f, 0f, h * 0.46f)
-                                close()
-                            }
-                            drawPath(
-                                path = goldWave1,
-                                brush = Brush.horizontalGradient(
-                                    listOf(
-                                        Color(0xFFFECC09).copy(alpha = 0.75f),
-                                        Color(0xFFFBBF24),
-                                        Color(0xFFFECC09).copy(alpha = 0.85f)
-                                    )
-                                )
-                            )
-                            val flowerY = h * 0.89f
+                            // Pasargad: Matte Black with delicate gold Persian Persepolis rosette row along bottom edge
+                            val flowerY = h * 0.91f
                             val rosettes = 10
                             val step = w / (rosettes + 1)
                             for (i in 1..rosettes) {
                                 val fx = step * i
                                 drawCircle(
-                                    color = Color(0xFFFECC09).copy(alpha = 0.65f),
-                                    radius = 3.dp.toPx(),
+                                    color = Color(0xFFFECC09).copy(alpha = 0.75f),
+                                    radius = 2.5.dp.toPx(),
                                     center = Offset(fx, flowerY)
                                 )
                                 drawCircle(
-                                    color = Color(0xFFFECC09).copy(alpha = 0.30f),
-                                    radius = 5.dp.toPx(),
+                                    color = Color(0xFFFECC09).copy(alpha = 0.35f),
+                                    radius = 4.5.dp.toPx(),
                                     center = Offset(fx, flowerY),
                                     style = Stroke(width = 1f)
                                 )
                             }
                         }
                         "mellat" -> {
-                            // Mellat Anthracite Charcoal + Bronze/Copper metallic curves + QR code square bottom-left
-                            val mellatWave = Path().apply {
-                                moveTo(0f, h * 0.52f)
-                                quadraticBezierTo(w * 0.50f, h * 0.44f, w, h * 0.54f)
-                            }
-                            drawPath(
-                                path = mellatWave,
-                                brush = Brush.horizontalGradient(
-                                    listOf(Color(0xFFF59E0B).copy(alpha = 0.50f), Color(0xFFD97706).copy(alpha = 0.40f))
-                                ),
-                                style = Stroke(width = 1.8.dp.toPx())
-                            )
-                            val qX = w * 0.08f
-                            val qY = h * 0.70f
-                            val qSize = 22.dp.toPx()
+                            // Mellat: Anthracite Charcoal + QR code accent at bottom-left corner
+                            val qX = w * 0.07f
+                            val qY = h * 0.74f
+                            val qSize = 20.dp.toPx()
                             drawRect(
-                                color = Color(0xFFF59E0B).copy(alpha = 0.70f),
+                                color = Color(0xFFF59E0B).copy(alpha = 0.60f),
                                 topLeft = Offset(qX, qY),
                                 size = androidx.compose.ui.geometry.Size(qSize, qSize),
                                 style = Stroke(width = 1.2.dp.toPx())
                             )
                             drawRect(
-                                color = Color(0xFFF59E0B).copy(alpha = 0.55f),
-                                topLeft = Offset(qX + 4.dp.toPx(), qY + 4.dp.toPx()),
-                                size = androidx.compose.ui.geometry.Size(qSize - 8.dp.toPx(), qSize - 8.dp.toPx())
+                                color = Color(0xFFF59E0B).copy(alpha = 0.40f),
+                                topLeft = Offset(qX + 3.dp.toPx(), qY + 3.dp.toPx()),
+                                size = androidx.compose.ui.geometry.Size(qSize - 6.dp.toPx(), qSize - 6.dp.toPx())
                             )
                         }
                         "sepah" -> {
-                            // Sepah: Slate top + fiery orange horizon ribbon + silver bottom with eslimi curves
+                            // Sepah: Top slate banner + vibrant orange horizon line + lower clean silver surface
                             drawRect(
-                                brush = Brush.verticalGradient(listOf(Color(0xFFCBD5E1), Color(0xFF94A3B8))),
-                                topLeft = Offset(0f, h * 0.52f),
-                                size = androidx.compose.ui.geometry.Size(w, h * 0.48f)
+                                color = Color(0xFF374151),
+                                topLeft = Offset(0f, 0f),
+                                size = androidx.compose.ui.geometry.Size(w, h * 0.35f)
                             )
-                            val sepahRibbon = Path().apply {
-                                moveTo(0f, h * 0.49f)
-                                quadraticBezierTo(w * 0.50f, h * 0.43f, w, h * 0.49f)
-                                lineTo(w, h * 0.53f)
-                                quadraticBezierTo(w * 0.50f, h * 0.47f, 0f, h * 0.53f)
-                                close()
-                            }
-                            drawPath(
-                                path = sepahRibbon,
-                                brush = Brush.horizontalGradient(
-                                    listOf(Color(0xFFEA580C), Color(0xFFF97316), Color(0xFFFBBF24), Color(0xFFEA580C))
-                                )
+                            drawLine(
+                                color = Color(0xFFEA580C),
+                                start = Offset(0f, h * 0.35f),
+                                end = Offset(w, h * 0.35f),
+                                strokeWidth = 2.2.dp.toPx()
                             )
-                            for (r in 1..4) {
-                                for (c in 1..13) {
-                                    drawCircle(
-                                        color = Color.White.copy(alpha = 0.07f),
-                                        radius = 1.2.dp.toPx(),
-                                        center = Offset(w * 0.07f * c, h * 0.08f * r)
-                                    )
-                                }
-                            }
+                            drawRect(
+                                brush = Brush.verticalGradient(
+                                    listOf(Color(0xFFF1F5F9), Color(0xFFE2E8F0), Color(0xFFCBD5E1))
+                                ),
+                                topLeft = Offset(0f, h * 0.35f + 2.2.dp.toPx()),
+                                size = androidx.compose.ui.geometry.Size(w, h * 0.65f)
+                            )
                         }
                         "mehr-iran" -> {
-                            // Mehr Iran: Emerald green + dark olive top band + girih geometric lattice watermark
+                            // Mehr Iran: Top dark olive/charcoal header ribbon + gold line + rich leaf/emerald green body
                             drawRect(
-                                color = Color(0xFF14532D),
+                                color = Color(0xFF262C27),
                                 topLeft = Offset(0f, 0f),
-                                size = androidx.compose.ui.geometry.Size(w, h * 0.24f)
+                                size = androidx.compose.ui.geometry.Size(w, h * 0.23f)
                             )
                             drawLine(
                                 color = Color(0xFFEAB308),
-                                start = Offset(0f, h * 0.24f),
-                                end = Offset(w, h * 0.24f),
+                                start = Offset(0f, h * 0.23f),
+                                end = Offset(w, h * 0.23f),
                                 strokeWidth = 1.4.dp.toPx()
                             )
-                            for (k in 1..4) {
-                                val diagX = w * 0.22f * k
+                            for (k in 1..3) {
+                                val diagX = w * 0.30f * k
                                 drawLine(
-                                    color = Color.White.copy(alpha = 0.08f),
-                                    start = Offset(diagX, h * 0.24f),
+                                    color = Color.White.copy(alpha = 0.04f),
+                                    start = Offset(diagX, h * 0.23f),
                                     end = Offset(diagX - w * 0.25f, h),
-                                    strokeWidth = 1f
-                                )
-                                drawLine(
-                                    color = Color.White.copy(alpha = 0.08f),
-                                    start = Offset(diagX, h * 0.24f),
-                                    end = Offset(diagX + w * 0.25f, h),
                                     strokeWidth = 1f
                                 )
                             }
                         }
                         "karafarin" -> {
-                            // Karafarin: Terracotta coral + top black band + diamond watermark bottom-left
+                            // Karafarin: Terracotta coral + top black band
                             drawRect(
                                 color = Color(0xFF18181B),
                                 topLeft = Offset(0f, 0f),
@@ -608,158 +593,45 @@ private fun RealisticIranianBankCardItem(
                                 end = Offset(w, h * 0.24f),
                                 strokeWidth = 1.4.dp.toPx()
                             )
-                            val dPath = Path().apply {
-                                moveTo(w * 0.12f, h * 0.72f)
-                                lineTo(w * 0.16f, h * 0.65f)
-                                lineTo(w * 0.20f, h * 0.72f)
-                                lineTo(w * 0.16f, h * 0.79f)
-                                close()
-                            }
-                            drawPath(dPath, color = Color.White.copy(alpha = 0.16f), style = Stroke(width = 2.dp.toPx()))
                         }
                         "blu" -> {
-                            // Blu Bank Neo-Bank Minimalist Cyber Waves
-                            val cyberWave = Path().apply {
-                                moveTo(0f, h * 0.62f)
-                                cubicTo(w * 0.30f, h * 0.45f, w * 0.70f, h * 0.75f, w, h * 0.50f)
-                            }
-                            drawPath(
-                                path = cyberWave,
-                                brush = Brush.horizontalGradient(
-                                    listOf(
-                                        Color(0xFF38BDF8).copy(alpha = 0.65f),
-                                        Color(0xFF60A5FA).copy(alpha = 0.85f),
-                                        Color(0xFF38BDF8).copy(alpha = 0.50f)
-                                    )
-                                ),
-                                style = Stroke(width = 2.6.dp.toPx())
-                            )
+                            // Blu Bank: Clean gradient with subtle modern halo
                             drawCircle(
-                                color = Color(0xFF38BDF8).copy(alpha = 0.08f),
-                                radius = w * 0.55f,
-                                center = Offset(w * 0.90f, h * 0.80f)
+                                color = Color(0xFF38BDF8).copy(alpha = 0.12f),
+                                radius = w * 0.45f,
+                                center = Offset(w * 0.90f, h * 0.85f)
                             )
                         }
                         "melli" -> {
-                            // Melli Imperial Gold Flourish Waves (subtle watermark)
-                            val melliWave = Path().apply {
-                                moveTo(0f, h * 0.50f)
-                                cubicTo(w * 0.25f, h * 0.42f, w * 0.75f, h * 0.58f, w, h * 0.48f)
-                            }
-                            drawPath(
-                                path = melliWave,
-                                brush = Brush.horizontalGradient(
-                                    listOf(
-                                        Color(0xFFF59E0B).copy(alpha = 0.35f),
-                                        Color(0xFFFEF08A).copy(alpha = 0.40f),
-                                        Color(0xFFF59E0B).copy(alpha = 0.35f)
-                                    )
-                                ),
-                                style = Stroke(width = 1.6.dp.toPx())
+                            // Melli: Imperial Red/Crimson with subtle corner sheen
+                            drawCircle(
+                                color = Color(0xFFF59E0B).copy(alpha = 0.15f),
+                                radius = w * 0.35f,
+                                center = Offset(w * 0.15f, h * 0.85f)
                             )
                         }
                         else -> {
-                            // General Elegant Dual Wave matching Bank Accent
-                            val generalWave = Path().apply {
-                                moveTo(0f, h * 0.52f)
-                                cubicTo(w * 0.30f, h * 0.44f, w * 0.70f, h * 0.60f, w, h * 0.50f)
-                            }
-                            drawPath(
-                                path = generalWave,
-                                brush = Brush.horizontalGradient(
-                                    listOf(
-                                        horizonAccentColor.copy(alpha = 0.30f),
-                                        Color.White.copy(alpha = 0.30f),
-                                        horizonAccentColor.copy(alpha = 0.30f)
-                                    )
-                                ),
-                                style = Stroke(width = 1.6.dp.toPx())
+                            // Subtle ambient accent in corner
+                            drawCircle(
+                                color = horizonAccentColor.copy(alpha = 0.12f),
+                                radius = w * 0.35f,
+                                center = Offset(w * 0.85f, h * 0.85f)
                             )
                         }
                     }
 
-                    // 4. Realistic EMV Smart Chip (چیپ هوشمند شتاب)
-                    val chipX = w * 0.09f
-                    val chipY = h * 0.36f
-                    val chipW = 38.dp.toPx()
-                    val chipH = 28.dp.toPx()
-                    val chipRadius = 4.dp.toPx()
-
-                    // Chip Body with Metallic Gold Gradient
-                    drawRoundRect(
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color(0xFFFDE68A),
-                                Color(0xFFF59E0B),
-                                Color(0xFFD97706),
-                                Color(0xFFFBBF24)
-                            ),
-                            start = Offset(chipX, chipY),
-                            end = Offset(chipX + chipW, chipY + chipH)
-                        ),
-                        topLeft = Offset(chipX, chipY),
-                        size = androidx.compose.ui.geometry.Size(chipW, chipH),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(chipRadius, chipRadius)
-                    )
-                    drawRoundRect(
-                        color = Color(0xFF92400E).copy(alpha = 0.6f),
-                        topLeft = Offset(chipX, chipY),
-                        size = androidx.compose.ui.geometry.Size(chipW, chipH),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(chipRadius, chipRadius),
-                        style = Stroke(width = 1f)
-                    )
-                    // Chip Contact Lines
-                    val chipMidX = chipX + chipW * 0.50f
-                    val chipMidY = chipY + chipH * 0.50f
-                    drawLine(
-                        color = Color(0xFF78350F).copy(alpha = 0.55f),
-                        start = Offset(chipX, chipMidY),
-                        end = Offset(chipX + chipW, chipMidY),
-                        strokeWidth = 1.2f
-                    )
-                    drawLine(
-                        color = Color(0xFF78350F).copy(alpha = 0.55f),
-                        start = Offset(chipMidX, chipY),
-                        end = Offset(chipMidX, chipY + chipH),
-                        strokeWidth = 1.2f
-                    )
-                    drawRoundRect(
-                        color = Color(0xFF78350F).copy(alpha = 0.45f),
-                        topLeft = Offset(chipX + chipW * 0.28f, chipY + chipH * 0.22f),
-                        size = androidx.compose.ui.geometry.Size(chipW * 0.44f, chipH * 0.56f),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx(), 2.dp.toPx()),
-                        style = Stroke(width = 1f)
-                    )
-
-                    // 5. Contactless NFC Payment Waves (نماد پرداخت بدون تماس)
-                    val nfcX = chipX + chipW + 10.dp.toPx()
-                    val nfcY = chipMidY
-                    val waveColor = Color.White.copy(alpha = 0.65f)
-                    for (i in 1..3) {
-                        val arcRadius = (4 + i * 4).dp.toPx()
-                        drawArc(
-                            color = waveColor,
-                            startAngle = -45f,
-                            sweepAngle = 90f,
-                            useCenter = false,
-                            topLeft = Offset(nfcX - arcRadius, nfcY - arcRadius),
-                            size = androidx.compose.ui.geometry.Size(arcRadius * 2, arcRadius * 2),
-                            style = Stroke(width = 1.6f, cap = StrokeCap.Round)
-                        )
-                    }
-
-                    // 6. Specular Metallic Sheen Across Card
+                    // Specular Metallic Sheen Across Card Top
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                Color.White.copy(alpha = 0.18f),
+                                Color.White.copy(alpha = 0.14f),
                                 Color.Transparent
                             ),
-                            center = Offset(w * 0.52f, h * 0.12f),
+                            center = Offset(w * 0.52f, h * 0.10f),
                             radius = w * 0.55f
                         ),
                         radius = w * 0.55f,
-                        center = Offset(w * 0.52f, h * 0.12f)
+                        center = Offset(w * 0.52f, h * 0.10f)
                     )
                 }
 
@@ -767,112 +639,107 @@ private fun RealisticIranianBankCardItem(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(horizontal = 18.dp, vertical = 14.dp),
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // 1. TOP HEADER: Right = Bank Logo + Persian & English Name | Left = Debit Card Badge
+                    // 1. TOP HEADER: Right = Bank Logo + Bank Name | Left = Shetab Debit Card Badge
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Top
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Right side (in RTL): Bank Emblem & Name
+                        // Right side (in RTL): Bank Emblem & Persian/English Name
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(9.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             IranianBankLogoBadge(
                                 bankInfo = bankInfo,
-                                size = 42.dp
+                                size = 40.dp
                             )
-                            Column {
+                            Column(verticalArrangement = Arrangement.Center) {
                                 Text(
                                     text = bankInfo?.persianName ?: account.bankName.ifBlank { account.name },
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = if (isLightCard) Color(0xFF18181B) else Color.White,
+                                    color = if (isLightCard) Color(0xFF0F172A) else Color.White,
                                     maxLines = 1
                                 )
                                 Text(
-                                    text = bankInfo?.englishName ?: "IRANIAN BANK CARD",
-                                    fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = 0.8.sp,
-                                    color = if (isLightCard) Color(0xFF3F3F46) else Color.White.copy(alpha = 0.85f)
+                                    text = if (bankInfo?.englishName?.isNotBlank() == true) bankInfo.englishName else "کارت نقدی",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.5.sp,
+                                    color = if (isLightCard) Color(0xFF475569) else Color.White.copy(alpha = 0.85f)
                                 )
                             }
                         }
 
-                        // Left side (in RTL): Classic "کارت نقدی / Debit Card" badge
-                        DebitCardShetabBadge(textColor = if (isLightCard) Color(0xFF18181B) else Color.White)
+                        // Left side (in RTL): Classic Shetab Badge
+                        DebitCardShetabBadge(textColor = if (isLightCard) Color(0xFF0F172A) else Color.White)
                     }
 
-                    // 2. UPPER-CENTER: Account Number + Sheba (IR...) in High-Contrast Shielded Capsule
+                    // 2. UPPER-CENTER: Sheba (IR...) & Account Number printed cleanly without background boxes
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        // Account Number centered (tappable to copy)
                         if (account.accountNumber.isNotBlank()) {
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = Color(0xDD080E1C),
-                                border = BorderStroke(0.8.dp, Color.White.copy(alpha = 0.25f)),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .clickable { onCopyField("شماره حساب", account.accountNumber) }
-                            ) {
-                                Text(
-                                    text = PersianNumberFormatter.formatDigits(account.accountNumber, currency),
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        textDirection = TextDirection.Ltr,
-                                        letterSpacing = 1.2.sp
-                                    ),
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                )
-                            }
-                        } else {
-                            Spacer(modifier = Modifier.height(10.dp))
-                        }
-
-                        // Sheba Number in opaque high-contrast shielded capsule (always displayed on card so user can view & copy)
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (isLightCard) Color(0xF818181B) else Color(0xF80A0F1D),
-                            border = BorderStroke(
-                                1.2.dp,
-                                if (bankId == "pasargad") Color(0xFFFECC09)
-                                else if (bankId == "mellat") Color(0xFFF59E0B)
-                                else horizonAccentColor.copy(alpha = 0.90f)
-                            ),
-                            shadowElevation = 5.dp,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { onCopyField("شماره شبا", displaySheba) }
-                        ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.5.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .clickable { onCopyField("شماره حساب", account.accountNumber) }
+                                    .padding(horizontal = 6.dp, vertical = 1.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
                             ) {
                                 Text(
-                                    text = "شبا: ",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = if (bankId == "pasargad") Color(0xFFFECC09) else Color(0xFFFBBF24)
+                                    text = "شماره حساب: ",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = cardSubtextColor
                                 )
+                                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                    Text(
+                                        text = account.accountNumber,
+                                        style = TextStyle(
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            textDirection = TextDirection.Ltr,
+                                            shadow = cardEmbossShadow
+                                        ),
+                                        color = cardTextColor
+                                    )
+                                }
+                            }
+                        }
+
+                        // Sheba Number: Clean text printed directly on card, strictly LTR, no ugly boxes!
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .clickable {
+                                    if (displaySheba.isNotBlank()) onCopyField("شماره شبا", displaySheba)
+                                    else onEdit()
+                                }
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                                 Text(
-                                    text = if (displaySheba.isNotBlank()) PersianNumberFormatter.formatDigits(displaySheba, currency)
-                                    else "IR - - - - - - - - - - - - - - - - - - - - - -",
-                                    style = MaterialTheme.typography.labelMedium.copy(
+                                    text = if (displaySheba.isNotBlank()) displaySheba else "IR ------------------------",
+                                    style = TextStyle(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 1.2.sp,
                                         textDirection = TextDirection.Ltr,
-                                        letterSpacing = 0.9.sp
+                                        shadow = cardEmbossShadow
                                     ),
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = if (displaySheba.isNotBlank()) Color.White else Color.White.copy(alpha = 0.65f),
+                                    color = if (displaySheba.isNotBlank()) cardShebaColor else cardSubtextColor.copy(alpha = 0.5f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -880,200 +747,141 @@ private fun RealisticIranianBankCardItem(
                         }
                     }
 
-                    // 3. LOWER HALF: 16-Digit Card Number + Cardholder Name + Expiry & CVV2
+                    // 3. 16-DIGIT CARD NUMBER: Clean, prominent, 4-digit groups, strictly LTR in Monospace Latin digits
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // 16-Digit Card Number (tappable to copy) with high-contrast frosted backdrop & shadow
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (isLightCard) Color(0x22000000) else Color(0x55000000),
-                            border = BorderStroke(0.8.dp, if (isLightCard) Color(0x35000000) else Color(0x35FFFFFF)),
-                            shadowElevation = 3.dp,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable { onCopyField("شماره کارت", account.cardNumber) }
-                        ) {
-                            Text(
-                                text = formatCardNumberGroups(account.cardNumber, currency.isEnglishDigits),
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontSize = 20.sp,
-                                    letterSpacing = 2.4.sp,
-                                    textDirection = TextDirection.Ltr,
-                                    shadow = Shadow(
-                                        color = if (isLightCard) Color.Black.copy(alpha = 0.35f) else Color.Black.copy(alpha = 0.85f),
-                                        offset = Offset(1f, 1.5f),
-                                        blurRadius = 3.5f
-                                    )
-                                ),
-                                fontWeight = FontWeight.ExtraBold,
-                                color = cardTextColor,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 3.5.dp)
-                            )
-                        }
+                        val formattedCard = formatCardNumberGroups(account.cardNumber)
+                        val cleanDigits = PersianNumberFormatter.toEnglishDigits(account.cardNumber).filter { it.isDigit() }
 
-                        // Cardholder Name centered below card number (tappable to copy)
-                        Text(
-                            text = account.cardHolderName.ifBlank { account.name },
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                shadow = Shadow(
-                                    color = if (isLightCard) Color.Transparent else Color.Black.copy(alpha = 0.65f),
-                                    offset = Offset(1f, 1f),
-                                    blurRadius = 2.5f
-                                )
-                            ),
-                            fontWeight = FontWeight.ExtraBold,
-                            color = cardSubtextColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                        Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .clickable {
-                                    onCopyField(
-                                        "نام صاحب کارت",
-                                        account.cardHolderName.ifBlank { account.name }
-                                    )
-                                }
-                                .padding(horizontal = 10.dp, vertical = 1.dp)
-                        )
+                                .clickable { onCopyField("شماره کارت", cleanDigits.ifBlank { account.cardNumber }) }
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                Text(
+                                    text = formattedCard,
+                                    style = TextStyle(
+                                        fontSize = 21.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace,
+                                        letterSpacing = 2.4.sp,
+                                        textDirection = TextDirection.Ltr,
+                                        textAlign = TextAlign.Center,
+                                        shadow = cardEmbossShadow
+                                    ),
+                                    color = cardTextColor
+                                )
+                            }
+                        }
+                    }
 
-                        Spacer(modifier = Modifier.height(2.dp))
-
-                        // Bottom Row: Right (in RTL) = تاریخ انقضا | Left (in RTL) = CVV2
+                    // 4. BOTTOM METADATA & CARDHOLDER:
+                    // Expiry and CVV2 cleanly formatted without boxes, plus centered cardholder name
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Right side in RTL: تاریخ انقضا (۲ بخش جداگانه: سال و ماه با کپسول مات و سایه محو)
+                            // Expiry Date (تاریخ انقضا)
                             val (expYear, expMonth) = remember(account.expiryDate) {
                                 parseExpiryYearAndMonth(account.expiryDate)
                             }
-                            val copyableExpiry = remember(expYear, expMonth, account.expiryDate) {
-                                if (expYear.isNotBlank() || expMonth.isNotBlank()) {
-                                    "${expYear.ifBlank { "--" }} ${expMonth.ifBlank { "--" }}"
-                                } else account.expiryDate
+                            val formattedExpiry = remember(expYear, expMonth, account.expiryDate) {
+                                if (expYear.isNotBlank() && expMonth.isNotBlank()) {
+                                    "${expMonth.padStart(2, '0')}/${expYear.padStart(2, '0')}"
+                                } else if (account.expiryDate.isNotBlank()) {
+                                    account.expiryDate.trim()
+                                } else "--/--"
                             }
+
                             Row(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .clickable { onCopyField("تاریخ انقضا", copyableExpiry) }
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .clickable { onCopyField("تاریخ انقضا", formattedExpiry) }
                                     .padding(horizontal = 4.dp, vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
                             ) {
                                 Text(
                                     text = "تاریخ انقضا:",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        shadow = Shadow(
-                                            color = if (isLightCard) Color.Transparent else Color.Black.copy(alpha = 0.6f),
-                                            offset = Offset(1f, 1f),
-                                            blurRadius = 2.5f
-                                        )
-                                    ),
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = if (isLightCard) Color(0xFF18181B) else Color.White.copy(alpha = 0.90f)
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = cardSubtextColor
                                 )
-                                CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = if (isLightCard) Color(0x35000000) else Color(0x73000000),
-                                            border = BorderStroke(0.8.dp, if (isLightCard) Color(0x55000000) else Color(0x44FFFFFF)),
-                                            shadowElevation = 2.dp
-                                        ) {
-                                            Text(
-                                                text = if (expYear.isBlank()) "--"
-                                                else PersianNumberFormatter.formatDigits(expYear.padStart(2, '0'), currency),
-                                                style = MaterialTheme.typography.bodySmall.copy(
-                                                    textDirection = TextDirection.Ltr,
-                                                    shadow = Shadow(
-                                                        color = Color.Black.copy(alpha = 0.55f),
-                                                        offset = Offset(1f, 1f),
-                                                        blurRadius = 2.5f
-                                                    )
-                                                ),
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = cardTextColor,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp)
-                                            )
-                                        }
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = if (isLightCard) Color(0x35000000) else Color(0x73000000),
-                                            border = BorderStroke(0.8.dp, if (isLightCard) Color(0x55000000) else Color(0x44FFFFFF)),
-                                            shadowElevation = 2.dp
-                                        ) {
-                                            Text(
-                                                text = if (expMonth.isBlank()) "--"
-                                                else PersianNumberFormatter.formatDigits(expMonth.padStart(2, '0'), currency),
-                                                style = MaterialTheme.typography.bodySmall.copy(
-                                                    textDirection = TextDirection.Ltr,
-                                                    shadow = Shadow(
-                                                        color = Color.Black.copy(alpha = 0.55f),
-                                                        offset = Offset(1f, 1f),
-                                                        blurRadius = 2.5f
-                                                    )
-                                                ),
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = cardTextColor,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp)
-                                            )
-                                        }
-                                    }
+                                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                    Text(
+                                        text = formattedExpiry,
+                                        style = TextStyle(
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.sp,
+                                            textDirection = TextDirection.Ltr,
+                                            shadow = cardEmbossShadow
+                                        ),
+                                        color = cardTextColor
+                                    )
                                 }
                             }
 
-                            // Left side in RTL: CVV2 in Frosted High-Contrast Capsule (LTR Layout so CVV2: is on left and digits on right)
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isLightCard) Color(0x38000000) else Color(0x73000000),
-                                border = BorderStroke(0.8.dp, if (isLightCard) Color(0x55000000) else Color(0x44FFFFFF)),
-                                shadowElevation = 3.dp,
+                            // CVV2: strictly LTR format (e.g. CVV2: 615)
+                            val cleanCvv2 = remember(account.cvv2) {
+                                PersianNumberFormatter.toEnglishDigits(account.cvv2).filter { it.isDigit() }
+                            }
+                            Row(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { onCopyField("CVV2", account.cvv2) }
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .clickable { onCopyField("CVV2", cleanCvv2.ifBlank { account.cvv2 }) }
+                                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Text(
-                                            text = "CVV2:",
-                                            style = MaterialTheme.typography.labelSmall.copy(
-                                                shadow = Shadow(
-                                                    color = Color.Black.copy(alpha = 0.5f),
-                                                    offset = Offset(1f, 1f),
-                                                    blurRadius = 2.5f
-                                                )
-                                            ),
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = if (isLightCard) Color(0xFFB45309) else horizonAccentColor
-                                        )
-                                        Text(
-                                            text = if (account.cvv2.isBlank()) "---"
-                                            else PersianNumberFormatter.formatDigits(account.cvv2, currency),
-                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                shadow = Shadow(
-                                                    color = Color.Black.copy(alpha = 0.5f),
-                                                    offset = Offset(1f, 1f),
-                                                    blurRadius = 2.5f
-                                                )
-                                            ),
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = cardTextColor
-                                        )
-                                    }
+                                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                    Text(
+                                        text = "CVV2: ${if (cleanCvv2.isNotBlank()) cleanCvv2 else "---"}",
+                                        style = TextStyle(
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.sp,
+                                            textDirection = TextDirection.Ltr,
+                                            shadow = cardEmbossShadow
+                                        ),
+                                        color = cardTextColor
+                                    )
                                 }
                             }
+                        }
+
+                        // Cardholder Name Centered at bottom
+                        val ownerName = account.cardHolderName.ifBlank { account.name }.trim()
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(4.dp))
+                                .clickable { onCopyField("نام صاحب کارت", ownerName) }
+                                .padding(vertical = 1.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = ownerName,
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontWeight = FontWeight.ExtraBold,
+                                    textAlign = TextAlign.Center,
+                                    shadow = cardEmbossShadow
+                                ),
+                                color = cardTextColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
                 }

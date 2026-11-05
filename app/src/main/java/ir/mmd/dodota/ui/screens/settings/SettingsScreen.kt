@@ -287,6 +287,7 @@ fun SettingsScreen(
                                 .fillMaxWidth()
                                 .clickable {
                                     coroutineScope.launch {
+                                        PersianNumberFormatter.globalUseEnglishDigits = curr.isEnglishDigits
                                         preferencesRepo.setCurrency(curr)
                                         showCurrencyDialog = false
                                     }
@@ -302,6 +303,7 @@ fun SettingsScreen(
                                     selected = isSelected,
                                     onClick = {
                                         coroutineScope.launch {
+                                            PersianNumberFormatter.globalUseEnglishDigits = curr.isEnglishDigits
                                             preferencesRepo.setCurrency(curr)
                                             showCurrencyDialog = false
                                         }
@@ -425,9 +427,11 @@ private fun TypographyCustomizationDialog(
     onChangeFontScale: (Float) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val currentScale = userPreferences.fontScale
+    var activeFont by remember(userPreferences.fontFamily) { mutableStateOf(userPreferences.fontFamily) }
+    var activeScale by remember(userPreferences.fontScale) { mutableStateOf(userPreferences.fontScale) }
+    val currentScale = activeScale
     val currentPercent = (currentScale * 100f).roundToInt()
-    val currentFont = userPreferences.fontFamily
+    val currentFont = activeFont
     val previewFontFamily = getDodotaFontFamily(currentFont)
 
     Dialog(
@@ -628,49 +632,59 @@ private fun TypographyCustomizationDialog(
                             ) {
                                 FilledTonalIconButton(
                                     onClick = {
-                                        onChangeFontScale((currentScale - 0.04f).coerceIn(0.80f, 1.35f))
+                                        val newScale = (activeScale - 0.04f).coerceIn(0.80f, 1.35f)
+                                        activeScale = newScale
+                                        onChangeFontScale(newScale)
                                     },
                                     modifier = Modifier
                                         .size(36.dp)
                                         .testTag("font_scale_decrease_button")
-                                ) {
-                                    Icon(Icons.Default.Remove, contentDescription = "کوچک‌تر", modifier = Modifier.size(18.dp))
-                                }
+                                 ) {
+                                     Icon(Icons.Default.Remove, contentDescription = "کوچک‌تر", modifier = Modifier.size(18.dp))
+                                 }
 
-                                Slider(
-                                    value = currentScale,
-                                    onValueChange = { onChangeFontScale(it) },
-                                    valueRange = 0.80f..1.30f,
-                                    steps = 9,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("font_scale_slider")
-                                )
+                                 Slider(
+                                     value = activeScale,
+                                     onValueChange = {
+                                         activeScale = it
+                                         onChangeFontScale(it)
+                                     },
+                                     valueRange = 0.80f..1.30f,
+                                     steps = 9,
+                                     modifier = Modifier
+                                         .weight(1f)
+                                         .testTag("font_scale_slider")
+                                 )
 
-                                FilledTonalIconButton(
-                                    onClick = {
-                                        onChangeFontScale((currentScale + 0.04f).coerceIn(0.80f, 1.35f))
-                                    },
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .testTag("font_scale_increase_button")
-                                ) {
-                                    Icon(Icons.Default.Add, contentDescription = "بزرگ‌تر", modifier = Modifier.size(18.dp))
-                                }
-                            }
+                                 FilledTonalIconButton(
+                                     onClick = {
+                                         val newScale = (activeScale + 0.04f).coerceIn(0.80f, 1.35f)
+                                         activeScale = newScale
+                                         onChangeFontScale(newScale)
+                                     },
+                                     modifier = Modifier
+                                         .size(36.dp)
+                                         .testTag("font_scale_increase_button")
+                                 ) {
+                                     Icon(Icons.Default.Add, contentDescription = "بزرگ‌تر", modifier = Modifier.size(18.dp))
+                                 }
+                             }
 
-                            // Quick Presets Row
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                AppFontSizePreset.entries.forEach { preset ->
-                                    val isPresetSelected = kotlin.math.abs(currentScale - preset.scale) < 0.03f
-                                    FilterChip(
-                                        selected = isPresetSelected,
-                                        onClick = { onChangeFontScale(preset.scale) },
+                             // Quick Presets Row
+                             Row(
+                                 modifier = Modifier
+                                     .fillMaxWidth()
+                                     .horizontalScroll(rememberScrollState()),
+                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
+                             ) {
+                                 AppFontSizePreset.entries.forEach { preset ->
+                                     val isPresetSelected = kotlin.math.abs(activeScale - preset.scale) < 0.03f
+                                     FilterChip(
+                                         selected = isPresetSelected,
+                                         onClick = {
+                                             activeScale = preset.scale
+                                             onChangeFontScale(preset.scale)
+                                         },
                                         label = {
                                             Text(
                                                 text = preset.title,
@@ -707,7 +721,10 @@ private fun TypographyCustomizationDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
-                                .clickable { onSelectFontFamily(fontOption) }
+                                .clickable {
+                                    activeFont = fontOption
+                                    onSelectFontFamily(fontOption)
+                                }
                                 .testTag("font_option_${fontOption.name.lowercase()}")
                         ) {
                             Row(
@@ -781,7 +798,10 @@ private fun TypographyCustomizationDialog(
 
                                 RadioButton(
                                     selected = isSelected,
-                                    onClick = { onSelectFontFamily(fontOption) }
+                                    onClick = {
+                                        activeFont = fontOption
+                                        onSelectFontFamily(fontOption)
+                                    }
                                 )
                             }
                         }

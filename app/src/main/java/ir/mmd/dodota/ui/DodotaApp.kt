@@ -91,10 +91,10 @@ fun DodotaApp(
     repository: DodotaRepository,
     preferencesRepo: UserPreferencesRepository,
     backupRepository: BackupRepository,
-    navController: NavHostController = rememberNavController()
+    navController: NavHostController = rememberNavController(),
+    userPreferences: UserPreferences = preferencesRepo.userPreferencesFlow.collectAsState(initial = UserPreferences()).value
 ) {
     val context = LocalContext.current
-    val userPreferences by preferencesRepo.userPreferencesFlow.collectAsState(initial = UserPreferences())
     val accounts by repository.allAccounts.collectAsState(initial = emptyList())
     val transactions by repository.allTransactions.collectAsState(initial = emptyList())
     val categories by repository.allCategories.collectAsState(initial = emptyList())

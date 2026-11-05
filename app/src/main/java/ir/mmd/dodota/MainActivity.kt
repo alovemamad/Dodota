@@ -64,7 +64,8 @@ class MainActivity : FragmentActivity() {
                         DodotaApp(
                             repository = repository,
                             preferencesRepo = preferencesRepo,
-                            backupRepository = backupRepository
+                            backupRepository = backupRepository,
+                            userPreferences = userPreferences
                         )
                     }
                 }

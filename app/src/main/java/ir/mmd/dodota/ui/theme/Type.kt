@@ -10,12 +10,7 @@ import ir.mmd.dodota.R
 import ir.mmd.dodota.data.model.AppFontFamilyOption
 
 private fun buildLocalFontFamily(fontResId: Int): FontFamily = FontFamily(
-    Font(resId = fontResId, weight = FontWeight.Light),
-    Font(resId = fontResId, weight = FontWeight.Normal),
-    Font(resId = fontResId, weight = FontWeight.Medium),
-    Font(resId = fontResId, weight = FontWeight.SemiBold),
-    Font(resId = fontResId, weight = FontWeight.Bold),
-    Font(resId = fontResId, weight = FontWeight.ExtraBold)
+    Font(resId = fontResId, weight = FontWeight.Normal)
 )
 
 val VazirmatnFontFamily = buildLocalFontFamily(R.font.vazirmatn)

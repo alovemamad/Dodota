@@ -1006,7 +1006,7 @@ fun PersianAmountInput(
     isError: Boolean = false,
     errorMessage: String? = null
 ) {
-    val useEn = currency.isEnglishDigits || LocalUseEnglishDigits.current || PersianNumberFormatter.globalUseEnglishDigits
+    val useEn = currency.isEnglishDigits
     val numericValue = PersianNumberFormatter.parseNumericValue(value)
     val formattedDisplay = remember(value, useEn) {
         if (value.isBlank()) {
@@ -1675,7 +1675,7 @@ fun CategoryPieChart(
     currency: AppCurrency,
     modifier: Modifier = Modifier
 ) {
-    val useEn = currency.isEnglishDigits || LocalUseEnglishDigits.current || PersianNumberFormatter.globalUseEnglishDigits
+    val useEn = currency.isEnglishDigits
     if (items.isEmpty() || totalAmount <= 0L) {
         EmptyStateCard(
             title = "اطلاعاتی برای نمایش نمودار وجود ندارد",

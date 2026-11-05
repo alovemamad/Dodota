@@ -327,7 +327,8 @@ fun DodotaTheme(
             LocalAppThemeMode provides themeMode,
             LocalAppFontFamily provides fontFamily,
             LocalAppFontScale provides fontScale,
-            LocalDodotaGlassStyle provides glassStyle
+            LocalDodotaGlassStyle provides glassStyle,
+            LocalTextStyle provides dynamicTypography.bodyLarge
         ) {
             content()
         }

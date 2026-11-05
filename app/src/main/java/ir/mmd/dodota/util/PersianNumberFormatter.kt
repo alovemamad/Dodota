@@ -139,10 +139,10 @@ object PersianNumberFormatter {
 
     fun formatCurrency(
         amount: Long,
-        currency: AppCurrency = AppCurrency.TOMAN,
+        currency: AppCurrency = if (globalUseEnglishDigits) AppCurrency.TOMAN_ENGLISH else AppCurrency.TOMAN,
         showSign: Boolean = false
     ): String {
-        val useEn = currency.isEnglishDigits || globalUseEnglishDigits
+        val useEn = currency.isEnglishDigits
         val formatted = formatNumber(abs(amount), useCommas = true, isEnglishDigits = useEn)
         val sign = when {
             amount < 0 -> "- "
@@ -155,8 +155,11 @@ object PersianNumberFormatter {
     /**
      * Compact chart axis formatter that still uses 3-by-3 commas and respects digit language.
      */
-    fun formatChartValue(amount: Long, currency: AppCurrency = AppCurrency.TOMAN): String {
-        val useEn = currency.isEnglishDigits || globalUseEnglishDigits
+    fun formatChartValue(
+        amount: Long,
+        currency: AppCurrency = if (globalUseEnglishDigits) AppCurrency.TOMAN_ENGLISH else AppCurrency.TOMAN
+    ): String {
+        val useEn = currency.isEnglishDigits
         return formatNumber(amount, useCommas = true, isEnglishDigits = useEn)
     }
 
