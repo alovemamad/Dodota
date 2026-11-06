@@ -239,6 +239,7 @@ data class ChandRoozRecordEntity(
     val note: String = "",
     val colorHex: String = "#3B82F6",
     val createdAtMillis: Long = System.currentTimeMillis(),
-    val customCategory: String = ""
+    val customCategory: String = "",
+    val excludedDays: String = ""
 )
 

@@ -247,7 +247,8 @@ class BackupRepository(
                     location = it.location,
                     note = it.note,
                     colorHex = it.colorHex,
-                    createdAtMillis = it.createdAtMillis
+                    createdAtMillis = it.createdAtMillis,
+                    excludedDays = it.excludedDays
                 )
             }
         } catch (_: Exception) {
@@ -549,6 +550,7 @@ class BackupRepository(
             o.put("note", cr.note)
             o.put("colorHex", cr.colorHex)
             o.put("createdAtMillis", cr.createdAtMillis)
+            o.put("excludedDays", cr.excludedDays)
             chandRoozArr.put(o)
         }
         root.put("chandRoozRecords", chandRoozArr)
@@ -969,7 +971,8 @@ class BackupRepository(
                         location = optSafeString(obj, "location", ""),
                         note = optSafeString(obj, "note", ""),
                         colorHex = optSafeString(obj, "colorHex", "#F97316"),
-                        createdAtMillis = optSafeLong(obj, "createdAtMillis", System.currentTimeMillis())
+                        createdAtMillis = optSafeLong(obj, "createdAtMillis", System.currentTimeMillis()),
+                        excludedDays = optSafeString(obj, "excludedDays", "")
                     )
                 )
             }
@@ -1338,7 +1341,8 @@ class BackupRepository(
                             location = it.location,
                             note = it.note,
                             colorHex = it.colorHex,
-                            createdAtMillis = it.createdAtMillis
+                            createdAtMillis = it.createdAtMillis,
+                            excludedDays = it.excludedDays
                         )
                     }
                     try {

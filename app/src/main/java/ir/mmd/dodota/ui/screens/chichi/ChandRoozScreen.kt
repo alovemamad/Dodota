@@ -729,6 +729,27 @@ fun ChandRoozRecordCard(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
+
+                    // Excluded days badge if any
+                    val excludedCount = remember(record.excludedDays) {
+                        if (record.excludedDays.isBlank()) 0
+                        else record.excludedDays.split(",").filter { it.isNotBlank() }.size
+                    }
+                    if (record.isRange && excludedCount > 0) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
+                        ) {
+                            Text(
+                                text = "${PersianNumberFormatter.formatDigits(excludedCount)} روز کسر شده",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
                 }
 
                 // Edit & Delete icons
@@ -796,6 +817,21 @@ fun ChandRoozRecordCard(
                 )
             }
 
+            // Excluded dates details if any
+            if (record.isRange && record.excludedDays.isNotBlank()) {
+                val excludedList = remember(record.excludedDays) {
+                    record.excludedDays.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                }
+                if (excludedList.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "عدم احتساب در محاسبه: ${PersianNumberFormatter.formatDigits(excludedList.size)} روز (${excludedList.joinToString("، ") { PersianNumberFormatter.formatDigits(it) }})",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
+                    )
+                }
+            }
+
             // Location if provided
             if (record.location.isNotBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
@@ -836,6 +872,73 @@ fun ChandRoozRecordCard(
             }
         }
     }
+}
+
+data class ChandRoozDayItem(
+    val year: Int,
+    val month: Int,
+    val day: Int,
+    val dateKey: String,
+    val weekdayIndex: Int,
+    val weekdayName: String,
+    val displayDate: String,
+    val isFriday: Boolean,
+    val isThursday: Boolean,
+    val millis: Long
+)
+
+private fun generateDaysInRange(
+    startYear: Int, startMonth: Int, startDay: Int,
+    endYear: Int, endMonth: Int, endDay: Int
+): List<ChandRoozDayItem> {
+    val startMillis = PersianDateHelper.toMillis(startYear, startMonth, startDay, 12, 0)
+    val endMillis = PersianDateHelper.toMillis(endYear, endMonth, endDay, 12, 0)
+    if (endMillis < startMillis) {
+        val wIndex = getPersianDayOfWeekIndex(startYear, startMonth, startDay)
+        val monthName = PersianDateHelper.PERSIAN_MONTHS.getOrElse(startMonth - 1) { "" }
+        return listOf(
+            ChandRoozDayItem(
+                year = startYear,
+                month = startMonth,
+                day = startDay,
+                dateKey = "$startYear/${startMonth.toString().padStart(2, '0')}/${startDay.toString().padStart(2, '0')}",
+                weekdayIndex = wIndex,
+                weekdayName = PersianDateHelper.PERSIAN_WEEKDAYS.getOrElse(wIndex) { "" },
+                displayDate = "$startDay $monthName",
+                isFriday = wIndex == 6,
+                isThursday = wIndex == 5,
+                millis = startMillis
+            )
+        )
+    }
+
+    val list = mutableListOf<ChandRoozDayItem>()
+    val oneDayMillis = 24 * 60 * 60 * 1000L
+    var currentMillis = startMillis
+    var counter = 0
+    while (currentMillis <= endMillis + (oneDayMillis / 2) && counter < 366) {
+        counter++
+        val pDate = PersianDateHelper.fromMillis(currentMillis)
+        val wIndex = getPersianDayOfWeekIndex(pDate.year, pDate.month, pDate.day)
+        val monthName = PersianDateHelper.PERSIAN_MONTHS.getOrElse(pDate.month - 1) { "" }
+        val dateKey = "${pDate.year}/${pDate.month.toString().padStart(2, '0')}/${pDate.day.toString().padStart(2, '0')}"
+        list.add(
+            ChandRoozDayItem(
+                year = pDate.year,
+                month = pDate.month,
+                day = pDate.day,
+                dateKey = dateKey,
+                weekdayIndex = wIndex,
+                weekdayName = PersianDateHelper.PERSIAN_WEEKDAYS.getOrElse(wIndex) { "" },
+                displayDate = "${pDate.day} $monthName",
+                isFriday = wIndex == 6,
+                isThursday = wIndex == 5,
+                millis = currentMillis
+            )
+        )
+        currentMillis += oneDayMillis
+    }
+    return list
 }
 
 @Composable
@@ -888,18 +991,24 @@ fun AddEditChandRoozDialog(
         PersianDateHelper.toMillis(endYear, endMonth, endDay, 20, 0)
     }
 
-    // Auto calculate days count
-    val computedDays = remember(startMillis, endMillis, isRange) {
-        if (!isRange) 1
-        else {
-            val diff = endMillis - startMillis
-            if (diff >= 0) {
-                (diff / (24 * 60 * 60 * 1000L)).toInt() + 1
-            } else 1
-        }
+    // Excluded days state (e.g. Fridays or holidays excluded by the user)
+    var excludedDaysSet by remember(record) {
+        mutableStateOf(
+            record?.excludedDays?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
+        )
     }
 
-    val currentDays = if (isRange) computedDays else 1
+    // Generate list of all individual days in the selected range
+    val daysInRange = remember(startYear, startMonth, startDay, endYear, endMonth, endDay) {
+        generateDaysInRange(startYear, startMonth, startDay, endYear, endMonth, endDay)
+    }
+
+    // Number of days selected (included) in the range
+    val selectedDaysCount = remember(daysInRange, excludedDaysSet) {
+        daysInRange.count { it.dateKey !in excludedDaysSet }
+    }
+
+    val currentDays = if (isRange) selectedDaysCount.coerceAtLeast(1) else 1
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -1096,6 +1205,230 @@ fun AddEditChandRoozDialog(
                         modifier = Modifier.testTag("chand_rooz_end_date_card")
                     )
 
+                    // Interactive Day Customization Section
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "انتخاب روزهای محاسبه‌شده:",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "می‌توانید جمعه‌ها یا روزهای غیرکاری را حذف کنید",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer
+                                ) {
+                                    Text(
+                                        text = "${PersianNumberFormatter.formatDigits(selectedDaysCount)} از ${PersianNumberFormatter.formatDigits(daysInRange.size)} روز",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            // Quick Filter Chips Row (حذف جمعه‌ها / حذف ۵شنبه و جمعه / انتخاب همه)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                val fridayKeys = remember(daysInRange) { daysInRange.filter { it.isFriday }.map { it.dateKey }.toSet() }
+                                val areAllFridaysExcluded = fridayKeys.isNotEmpty() && fridayKeys.all { it in excludedDaysSet }
+
+                                FilterChip(
+                                    selected = areAllFridaysExcluded,
+                                    onClick = {
+                                        excludedDaysSet = if (areAllFridaysExcluded) {
+                                            excludedDaysSet - fridayKeys
+                                        } else {
+                                            excludedDaysSet + fridayKeys
+                                        }
+                                    },
+                                    label = {
+                                        Text(
+                                            text = if (areAllFridaysExcluded) "جمعه‌ها کسر شد ✓" else "حذف جمعه‌ها",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = if (areAllFridaysExcluded) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            if (areAllFridaysExcluded) Icons.Default.Check else Icons.Default.EventBusy,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = if (areAllFridaysExcluded) Color(0xFFEF4444) else MaterialTheme.colorScheme.primary
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+
+                                val weekendKeys = remember(daysInRange) { daysInRange.filter { it.isFriday || it.isThursday }.map { it.dateKey }.toSet() }
+                                val areAllWeekendExcluded = weekendKeys.isNotEmpty() && weekendKeys.all { it in excludedDaysSet }
+                                FilterChip(
+                                    selected = areAllWeekendExcluded,
+                                    onClick = {
+                                        excludedDaysSet = if (areAllWeekendExcluded) {
+                                            excludedDaysSet - weekendKeys
+                                        } else {
+                                            excludedDaysSet + weekendKeys
+                                        }
+                                    },
+                                    label = {
+                                        Text(
+                                            text = if (areAllWeekendExcluded) "۵شنبه و جمعه کسر شد ✓" else "حذف ۵شنبه و جمعه",
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+
+                                if (excludedDaysSet.isNotEmpty()) {
+                                    TextButton(
+                                        onClick = { excludedDaysSet = emptySet() },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(32.dp)
+                                    ) {
+                                        Text("انتخاب همه روزها", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                            }
+
+                            Text(
+                                text = "برای کسر یا اضافه کردن هر روز، روی آن ضربه بزنید:",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+
+                            // Interactive Days List
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 240.dp)
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                daysInRange.forEach { dayItem ->
+                                    val isIncluded = dayItem.dateKey !in excludedDaysSet
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (isIncluded) {
+                                            if (dayItem.isFriday) Color(0xFFEF4444).copy(alpha = 0.12f)
+                                            else MaterialTheme.colorScheme.surface
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                                        },
+                                        border = BorderStroke(
+                                            width = if (isIncluded) 1.dp else 0.8.dp,
+                                            color = if (isIncluded) {
+                                                if (dayItem.isFriday) Color(0xFFEF4444).copy(alpha = 0.45f)
+                                                else MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                                            } else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                excludedDaysSet = if (isIncluded) {
+                                                    excludedDaysSet + dayItem.dateKey
+                                                } else {
+                                                    excludedDaysSet - dayItem.dateKey
+                                                }
+                                            }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Checkbox(
+                                                    checked = isIncluded,
+                                                    onCheckedChange = {
+                                                        excludedDaysSet = if (it) {
+                                                            excludedDaysSet - dayItem.dateKey
+                                                        } else {
+                                                            excludedDaysSet + dayItem.dateKey
+                                                        }
+                                                    },
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                                Text(
+                                                    text = dayItem.weekdayName,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (dayItem.isFriday) Color(0xFFEF4444)
+                                                    else if (isIncluded) MaterialTheme.colorScheme.onSurface
+                                                    else MaterialTheme.colorScheme.outline
+                                                )
+                                                Text(
+                                                    text = PersianNumberFormatter.formatDigits(dayItem.displayDate),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = if (isIncluded) MaterialTheme.colorScheme.onSurfaceVariant
+                                                    else MaterialTheme.colorScheme.outline
+                                                )
+                                            }
+
+                                            if (dayItem.isFriday) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = Color(0xFFEF4444).copy(alpha = 0.16f)
+                                                ) {
+                                                    Text(
+                                                        text = if (isIncluded) "جمعه (محاسبه می‌شود)" else "جمعه (تعطیل - کسر شده)",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Color(0xFFEF4444),
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            } else if (!isIncluded) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)
+                                                ) {
+                                                    Text(
+                                                        text = "محاسبه نمی‌شود",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.outline,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Duration Badge Counter
                     Surface(
                         shape = RoundedCornerShape(14.dp),
@@ -1103,37 +1436,49 @@ fun AddEditChandRoozDialog(
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
                             Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    Icons.Default.HourglassBottom,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Text(
-                                    text = "مجموع مدت زمان بازه:",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.HourglassBottom,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = "مجموع روزهای محاسبه‌شده:",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.primary
+                                ) {
+                                    Text(
+                                        text = "${PersianNumberFormatter.formatDigits(currentDays)} روز",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
+                                    )
+                                }
                             }
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.primary
-                            ) {
+
+                            val excludedCount = daysInRange.size - selectedDaysCount
+                            if (excludedCount > 0) {
+                                Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = "${PersianNumberFormatter.formatDigits(currentDays)} روز",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
+                                    text = "💡 ${PersianNumberFormatter.formatDigits(excludedCount)} روز (جمعه‌ها یا روزهای انتخابی شما) کسر شده و محاسبه نمی‌شود.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
@@ -1225,7 +1570,8 @@ fun AddEditChandRoozDialog(
                                 location = location.trim(),
                                 note = note.trim(),
                                 colorHex = selectedCategory.defaultColorHex,
-                                customCategory = resolvedCustomCat
+                                customCategory = resolvedCustomCat,
+                                excludedDays = if (isRange) excludedDaysSet.sorted().joinToString(",") else ""
                             )
                             onSave(newRecord)
                         },

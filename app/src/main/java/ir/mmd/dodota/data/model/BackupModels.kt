@@ -252,5 +252,6 @@ data class ChandRoozBackupItem(
     val location: String = "",
     val note: String = "",
     val colorHex: String = "#F97316",
-    val createdAtMillis: Long = System.currentTimeMillis()
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    val excludedDays: String = ""
 )
