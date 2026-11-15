@@ -29,18 +29,16 @@ jobs:
     - name: Bump version automatically
       id: bump
       run: |
-        # خواندن نسخه فعلی از build.gradle.kts
-        CURRENT_VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -1)
+        # خواندن نسخه فعلی (پشتیبانی از هر دو فرمت با و بدون =)
+        CURRENT_VERSION=$(grep -oP 'versionName\s*=?\s*"\K[^"]+' app/build.gradle.kts | head -1)
         echo "Current version: $CURRENT_VERSION"
 
-        # افزایش قسمت آخر نسخه (مثلاً 1.0.0 -> 1.0.1)
         MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
         MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
         PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
         NEW_PATCH=$((PATCH + 1))
         NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
 
-        # اگر run_number بزرگتر است، از آن استفاده کن (برای جلوگیری از تکرار)
         RUN_PATCH=${{ github.run_number }}
         if [ "$RUN_PATCH" -gt "$NEW_PATCH" ]; then
           NEW_PATCH=$RUN_PATCH
@@ -49,11 +47,12 @@ jobs:
 
         echo "New version: $NEW_VERSION"
 
-        # جایگزینی در فایل build.gradle.kts
-        sed -i -E "s/versionName = \"[^\"]*\"/versionName = \"$NEW_VERSION\"/" app/build.gradle.kts
-        sed -i -E "s/versionCode = [0-9]+/versionCode $NEW_PATCH/" app/build.gradle.kts
+        # جایگزینی versionName (پشتیبانی از هر دو فرمت)
+        sed -i -E "s/versionName\s*=?\s*\"[^\"]*\"/versionName = \"$NEW_VERSION\"/" app/build.gradle.kts
 
-        # ذخیره برای مراحل بعدی
+        # جایگزینی versionCode (پشتیبانی از هر دو فرمت با و بدون =)
+        sed -i -E "s/versionCode\s*=?\s*[0-9]+/versionCode = $NEW_PATCH/" app/build.gradle.kts
+
         echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
         echo "NEW_PATCH=$NEW_PATCH" >> $GITHUB_ENV
 
