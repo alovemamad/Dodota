@@ -3,7 +3,6 @@ name: Build APK
 on:
   push:
     branches: [ "main" ]
-    tags: [ "v*" ]
   workflow_dispatch:
 
 permissions:
@@ -29,7 +28,6 @@ jobs:
     - name: Bump version automatically
       id: bump
       run: |
-        # خواندن نسخه فعلی (پشتیبانی از هر دو فرمت با و بدون =)
         CURRENT_VERSION=$(grep -oP 'versionName\s*=?\s*"\K[^"]+' app/build.gradle.kts | head -1)
         echo "Current version: $CURRENT_VERSION"
 
@@ -39,22 +37,16 @@ jobs:
         NEW_PATCH=$((PATCH + 1))
         NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
 
-        RUN_PATCH=${{ github.run_number }}
-        if [ "$RUN_PATCH" -gt "$NEW_PATCH" ]; then
-          NEW_PATCH=$RUN_PATCH
-          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
-        fi
+        # versionCode همیشه صعودی: MAJOR*10000 + MINOR*100 + PATCH
+        NEW_CODE=$((MAJOR * 10000 + MINOR * 100 + NEW_PATCH))
 
-        echo "New version: $NEW_VERSION"
+        echo "New version: $NEW_VERSION (code: $NEW_CODE)"
 
-        # جایگزینی versionName (پشتیبانی از هر دو فرمت)
         sed -i -E "s/versionName\s*=?\s*\"[^\"]*\"/versionName = \"$NEW_VERSION\"/" app/build.gradle.kts
-
-        # جایگزینی versionCode (پشتیبانی از هر دو فرمت با و بدون =)
-        sed -i -E "s/versionCode\s*=?\s*[0-9]+/versionCode = $NEW_PATCH/" app/build.gradle.kts
+        sed -i -E "s/versionCode\s*=?\s*[0-9]+/versionCode = $NEW_CODE/" app/build.gradle.kts
 
         echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-        echo "NEW_PATCH=$NEW_PATCH" >> $GITHUB_ENV
+        echo "NEW_CODE=$NEW_CODE" >> $GITHUB_ENV
 
     - name: Create Keystores
       run: |
@@ -74,7 +66,7 @@ jobs:
         KEY_PASSWORD: dodota123456
       run: gradle assembleRelease assembleDebug
 
-    - name: Upload Release APK (Recommended for Phone Installation)
+    - name: Upload Release APK
       uses: actions/upload-artifact@v4
       with:
         name: app-release
@@ -87,7 +79,7 @@ jobs:
         path: app/build/outputs/apk/debug/app-debug.apk
 
     - name: Create Release and Upload APK
-      if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+      if: github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v2
       with:
         tag_name: v${{ env.NEW_VERSION }}
