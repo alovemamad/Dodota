@@ -256,9 +256,29 @@ class DodotaRepository(private val db: DodotaDatabase) {
 
     suspend fun updateInstallmentPlan(plan: InstallmentPlanEntity) {
         db.withTransaction {
+            val oldPlan = installmentDao.getPlanById(plan.id)
             val existingInstallments = installmentDao.getInstallmentsForPlanSync(plan.id)
-            val paidMap = existingInstallments.filter { it.isPaid }.associateBy { it.installmentIndex }
+            val existingByIndex = existingInstallments.associateBy { it.installmentIndex }
+            val existingPaidIndices = existingInstallments
+                .filter { it.isPaid && it.installmentIndex in 1..plan.numberOfInstallments }
+                .map { it.installmentIndex }
+                .sorted()
+
             val targetPaidCount = plan.paidInstallments.coerceIn(0, plan.numberOfInstallments)
+            val finalPaidIndices: Set<Int> = when {
+                targetPaidCount == existingPaidIndices.size -> existingPaidIndices.toSet()
+                targetPaidCount < existingPaidIndices.size -> existingPaidIndices.take(targetPaidCount).toSet()
+                else -> {
+                    val result = existingPaidIndices.toMutableSet()
+                    for (idx in 1..plan.numberOfInstallments) {
+                        if (result.size >= targetPaidCount) break
+                        result.add(idx)
+                    }
+                    result
+                }
+            }
+
+            val isAmountChanged = oldPlan == null || oldPlan.installmentAmount != plan.installmentAmount
 
             installmentDao.deleteInstallmentsForPlan(plan.id)
 
@@ -273,21 +293,28 @@ class DodotaRepository(private val db: DodotaDatabase) {
                 val maxDays = PersianDateHelper.getDaysInPersianMonth(y, m)
                 val day = plan.dueDayOfMonth.coerceIn(1, maxDays)
                 val dueMillis = PersianDateHelper.toMillis(y, m, day, 10, 0)
-                val prevPaid = paidMap[index]
-                val isPaidNow = prevPaid != null || index <= targetPaidCount
+                val prevItem = existingByIndex[index]
+                val isPaidNow = index in finalPaidIndices
+                val itemAmount = if (!isAmountChanged && prevItem != null) prevItem.amount else plan.installmentAmount
 
                 InstallmentEntity(
                     planId = plan.id,
                     installmentIndex = index,
-                    amount = plan.installmentAmount,
+                    amount = itemAmount,
                     dueDateMillis = dueMillis,
                     isPaid = isPaidNow,
-                    paidDateMillis = prevPaid?.paidDateMillis ?: if (isPaidNow) dueMillis else null,
-                    transactionId = prevPaid?.transactionId
+                    paidDateMillis = if (isPaidNow) (prevItem?.paidDateMillis ?: dueMillis) else null,
+                    transactionId = if (isPaidNow) prevItem?.transactionId else null
                 )
             }
             val actualPaidCount = newInstallments.count { it.isPaid }
+            val computedTotalAmount = if (newInstallments.isNotEmpty()) {
+                newInstallments.sumOf { it.amount }
+            } else {
+                plan.numberOfInstallments * plan.installmentAmount
+            }
             val finalPlan = plan.copy(
+                totalAmount = computedTotalAmount,
                 paidInstallments = actualPaidCount,
                 isCompleted = actualPaidCount >= plan.numberOfInstallments && plan.numberOfInstallments > 0
             )
@@ -298,6 +325,24 @@ class DodotaRepository(private val db: DodotaDatabase) {
 
     suspend fun updateInstallmentItem(installment: InstallmentEntity) {
         installmentDao.updateInstallment(installment)
+    }
+
+    suspend fun updateSingleInstallmentAndSyncPlan(
+        plan: InstallmentPlanEntity,
+        updatedInstallment: InstallmentEntity
+    ) {
+        db.withTransaction {
+            installmentDao.updateInstallment(updatedInstallment)
+            val allItems = installmentDao.getInstallmentsForPlanSync(plan.id)
+            val actualPaidCount = allItems.count { it.isPaid }
+            val totalAmount = allItems.sumOf { it.amount }
+            val updatedPlan = plan.copy(
+                totalAmount = totalAmount,
+                paidInstallments = actualPaidCount,
+                isCompleted = actualPaidCount >= plan.numberOfInstallments && plan.numberOfInstallments > 0
+            )
+            installmentDao.updatePlan(updatedPlan)
+        }
     }
 
     suspend fun unpayInstallment(plan: InstallmentPlanEntity, installment: InstallmentEntity) {
