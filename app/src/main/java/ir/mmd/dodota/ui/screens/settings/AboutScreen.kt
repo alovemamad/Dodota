@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import ir.mmd.dodota.BuildConfig
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.util.PersianNumberFormatter
 import ir.mmd.dodota.util.TelegramHelper
@@ -73,7 +74,7 @@ fun AboutScreen(
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = PersianNumberFormatter.formatDigits("نسخه 1.0.0 • توسعه‌دهنده: Mmd"),
+                            text = PersianNumberFormatter.formatDigits("نسخه ${BuildConfig.VERSION_NAME} • توسعه‌دهنده: Mmd"),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer

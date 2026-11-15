@@ -20,6 +20,9 @@ android {
     versionCode = 1
     versionName = "1.0.0"
 
+    val defaultGithubRepo = (System.getenv("GITHUB_REPOSITORY") ?: "").trim().replace("\"", "").ifBlank { "alovemamad/Dodota" }
+    buildConfigField("String", "DEFAULT_GITHUB_REPO", "\"$defaultGithubRepo\"")
+
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 

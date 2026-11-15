@@ -29,7 +29,10 @@ data class UserPreferences(
     val lastBackupMillis: Long = 0L,
     val isOnboardingCompleted: Boolean = false,
     val isBalanceHidden: Boolean = false,
-    val isChichiPlusEnabled: Boolean = false
+    val isChichiPlusEnabled: Boolean = false,
+    val githubRepoSlug: String = "",
+    val lastUpdateCheckMillis: Long = 0L,
+    val latestKnownVersion: String = ""
 ) {
     val isPinEnabled: Boolean get() = isAppLockEnabled && pinHash.isNotBlank()
     val colorTheme: AppThemeMode get() = themeMode
@@ -54,6 +57,9 @@ class UserPreferencesRepository(private val context: Context) {
         val IS_ONBOARDING_COMPLETED = booleanPreferencesKey("is_onboarding_completed")
         val IS_BALANCE_HIDDEN = booleanPreferencesKey("is_balance_hidden")
         val IS_CHICHI_PLUS_ENABLED = booleanPreferencesKey("is_chichi_plus_enabled")
+        val GITHUB_REPO_SLUG = stringPreferencesKey("github_repo_slug")
+        val LAST_UPDATE_CHECK_MILLIS = longPreferencesKey("last_update_check_millis")
+        val LATEST_KNOWN_VERSION = stringPreferencesKey("latest_known_version")
     }
 
     val userPreferencesFlow: Flow<UserPreferences> = dataStore.data
@@ -97,13 +103,31 @@ class UserPreferencesRepository(private val context: Context) {
                 lastBackupMillis = preferences[PreferencesKeys.LAST_BACKUP_MILLIS] ?: 0L,
                 isOnboardingCompleted = preferences[PreferencesKeys.IS_ONBOARDING_COMPLETED] ?: false,
                 isBalanceHidden = preferences[PreferencesKeys.IS_BALANCE_HIDDEN] ?: false,
-                isChichiPlusEnabled = preferences[PreferencesKeys.IS_CHICHI_PLUS_ENABLED] ?: false
+                isChichiPlusEnabled = preferences[PreferencesKeys.IS_CHICHI_PLUS_ENABLED] ?: false,
+                githubRepoSlug = preferences[PreferencesKeys.GITHUB_REPO_SLUG] ?: "",
+                lastUpdateCheckMillis = preferences[PreferencesKeys.LAST_UPDATE_CHECK_MILLIS] ?: 0L,
+                latestKnownVersion = preferences[PreferencesKeys.LATEST_KNOWN_VERSION] ?: ""
             )
         }
 
     suspend fun setChichiPlusEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.IS_CHICHI_PLUS_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setGithubRepoSlug(slug: String) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.GITHUB_REPO_SLUG] = slug.trim()
+        }
+    }
+
+    suspend fun updateLastUpdateCheck(millis: Long, latestVersion: String) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LAST_UPDATE_CHECK_MILLIS] = millis
+            if (latestVersion.isNotBlank()) {
+                preferences[PreferencesKeys.LATEST_KNOWN_VERSION] = latestVersion
+            }
         }
     }
 

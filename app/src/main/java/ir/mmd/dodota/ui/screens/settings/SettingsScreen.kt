@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import ir.mmd.dodota.BuildConfig
 import ir.mmd.dodota.data.model.AppCurrency
 import ir.mmd.dodota.data.model.AppFontFamilyOption
 import ir.mmd.dodota.data.model.AppFontSizePreset
@@ -42,8 +43,13 @@ import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.GlassCard
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.ui.theme.getDodotaFontFamily
+import ir.mmd.dodota.util.ApkDownloadState
+import ir.mmd.dodota.util.GitHubUpdateHelper
+import ir.mmd.dodota.util.GitHubUpdateResult
+import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 import ir.mmd.dodota.util.TelegramHelper
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -62,6 +68,7 @@ fun SettingsScreen(
     var showCurrencyDialog by remember { mutableStateOf(false) }
     var showThemeModeDialog by remember { mutableStateOf(false) }
     var showTypographyDialog by remember { mutableStateOf(false) }
+    var showGithubUpdateDialog by remember { mutableStateOf(false) }
 
     val fontPercent = (userPreferences.fontScale * 100f).roundToInt()
     val fontSizePresetTitle = AppFontSizePreset.fromScale(userPreferences.fontScale).title
@@ -217,14 +224,35 @@ fun SettingsScreen(
                 )
             }
 
-            // Support & About Section
+            // Support & Updates & About Section
             item {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "پشتیبانی و درباره دودوتا",
+                    text = "بروزرسانی، پشتیبانی و درباره دودوتا",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            item {
+                val updateSubtitle = if (userPreferences.lastUpdateCheckMillis > 0L) {
+                    PersianNumberFormatter.formatDigits(
+                        "نسخه فعلی: ${BuildConfig.VERSION_NAME} • آخرین بررسی: ${PersianDateHelper.formatToPersianDate(userPreferences.lastUpdateCheckMillis)}",
+                        userPreferences.currency
+                    )
+                } else {
+                    PersianNumberFormatter.formatDigits(
+                        "نسخه فعلی: ${BuildConfig.VERSION_NAME} • بررسی و دانلود مستقیم نسخه جدید",
+                        userPreferences.currency
+                    )
+                }
+                SettingsItemCard(
+                    icon = Icons.Outlined.SystemUpdate,
+                    title = "بررسی بروزرسانی برنامه",
+                    subtitle = updateSubtitle,
+                    onClick = { showGithubUpdateDialog = true },
+                    testTag = "settings_github_update_card"
                 )
             }
 
@@ -244,12 +272,24 @@ fun SettingsScreen(
                 SettingsItemCard(
                     icon = Icons.Outlined.Info,
                     title = "درباره «دودوتا»",
-                    subtitle = PersianNumberFormatter.formatDigits("نسخه 1.0.0", userPreferences.currency),
+                    subtitle = PersianNumberFormatter.formatDigits("نسخه ${BuildConfig.VERSION_NAME}", userPreferences.currency),
                     onClick = onNavigateToAbout,
                     testTag = "settings_about_card"
                 )
             }
         }
+    }
+
+    if (showGithubUpdateDialog) {
+        GitHubUpdateDialog(
+            userPreferences = userPreferences,
+            onRecordCheck = { version ->
+                coroutineScope.launch {
+                    preferencesRepo.updateLastUpdateCheck(System.currentTimeMillis(), version)
+                }
+            },
+            onDismiss = { showGithubUpdateDialog = false }
+        )
     }
 
     if (showTypographyDialog) {
@@ -1099,4 +1139,579 @@ fun SettingsSwitchCard(
         }
     }
 }
+
+@Composable
+private fun GitHubUpdateDialog(
+    userPreferences: UserPreferences,
+    onRecordCheck: (latestVersion: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var updateState by remember { mutableStateOf<GitHubUpdateResult>(GitHubUpdateResult.Loading) }
+    var downloadState by remember { mutableStateOf<ApkDownloadState>(ApkDownloadState.Idle) }
+    var downloadJob by remember { mutableStateOf<Job?>(null) }
+
+    fun runUpdateCheck() {
+        updateState = GitHubUpdateResult.Loading
+        coroutineScope.launch {
+            val result = GitHubUpdateHelper.checkForUpdates(GitHubUpdateHelper.PROJECT_GITHUB_REPO)
+            updateState = result
+            when (result) {
+                is GitHubUpdateResult.UpdateAvailable -> onRecordCheck(result.release.cleanVersion)
+                is GitHubUpdateResult.UpToDate -> onRecordCheck(result.release.cleanVersion)
+                is GitHubUpdateResult.TagOnlyInfo -> onRecordCheck(GitHubUpdateHelper.cleanVersionName(result.latestTag))
+                is GitHubUpdateResult.NoReleaseYet -> onRecordCheck("")
+                else -> {}
+            }
+        }
+    }
+
+    fun startApkDownload(downloadUrl: String, versionTag: String, preferredFileName: String?) {
+        val started = GitHubUpdateHelper.startDirectApkDownload(
+            context = context,
+            downloadUrl = downloadUrl,
+            versionTag = versionTag,
+            preferredFileName = preferredFileName
+        )
+        if (started == null) {
+            // Fallback to opening direct link in browser if DownloadManager unavailable
+            GitHubUpdateHelper.openUrlInBrowser(context, downloadUrl)
+            return
+        }
+        val (downloadId, fileName) = started
+        downloadJob?.cancel()
+        downloadJob = coroutineScope.launch {
+            GitHubUpdateHelper.observeDownloadProgress(context, downloadId, fileName).collect { state ->
+                downloadState = state
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        runUpdateCheck()
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        GlassCard(
+            shape = RoundedCornerShape(28.dp),
+            elevation = 10.dp,
+            isHighlighted = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 24.dp)
+                .navigationBarsPadding()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.SystemUpdate,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "بروزرسانی برنامه",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            Text(
+                                text = PersianNumberFormatter.formatDigits("نسخه فعلی: ${BuildConfig.VERSION_NAME}", userPreferences.currency),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "بستن")
+                    }
+                }
+
+                // State Content
+                when (val result = updateState) {
+                    GitHubUpdateResult.Idle, GitHubUpdateResult.Loading -> {
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 28.dp, horizontal = 16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(34.dp), strokeWidth = 3.dp)
+                                Text(
+                                    text = "در حال بررسی آخرین نسخه در گیت‌هاب...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    is GitHubUpdateResult.UpdateAvailable -> {
+                        val rel = result.release
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = IncomeGreen.copy(alpha = 0.12f),
+                            border = BorderStroke(1.5.dp, IncomeGreen.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.NewReleases,
+                                            contentDescription = null,
+                                            tint = IncomeGreen,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Text(
+                                            text = "نسخه جدید آماده دریافت است!",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = IncomeGreen
+                                        )
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = IncomeGreen
+                                    ) {
+                                        Text(
+                                            text = PersianNumberFormatter.formatDigits(rel.versionTag, userPreferences.currency),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Color.White,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+
+                                if (rel.publishedPersianDate.isNotBlank()) {
+                                    Text(
+                                        text = "تاریخ انتشار: ${rel.publishedPersianDate}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                if (rel.notes.isNotBlank()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = rel.notes,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = 140.dp)
+                                                .verticalScroll(rememberScrollState())
+                                                .padding(10.dp)
+                                        )
+                                    }
+                                }
+
+                                // Direct Download Progress & Confirmation
+                                when (val dl = downloadState) {
+                                    ApkDownloadState.Idle -> {
+                                        val sizeStr = GitHubUpdateHelper.formatFileSizeMb(rel.apkSizeBytes)
+                                        Text(
+                                            text = if (rel.apkDownloadUrl != null) {
+                                                "آیا مایل به دانلود مستقیم فایل نصب" +
+                                                    (if (sizeStr.isNotBlank()) " (${PersianNumberFormatter.formatDigits(sizeStr, userPreferences.currency)})" else "") +
+                                                    " هستید؟"
+                                            } else {
+                                                "برای دریافت نسخه جدید به صفحه انتشار هدایت خواهید شد."
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = onDismiss,
+                                                shape = RoundedCornerShape(12.dp),
+                                                modifier = Modifier.weight(0.8f)
+                                            ) {
+                                                Text("فعلاً نه")
+                                            }
+                                            Button(
+                                                onClick = {
+                                                    val apkUrl = rel.apkDownloadUrl
+                                                    if (apkUrl != null) {
+                                                        startApkDownload(apkUrl, rel.versionTag, rel.apkFileName)
+                                                    } else {
+                                                        GitHubUpdateHelper.openUrlInBrowser(context, rel.releasePageUrl)
+                                                    }
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = IncomeGreen),
+                                                shape = RoundedCornerShape(12.dp),
+                                                modifier = Modifier
+                                                    .weight(1.3f)
+                                                    .testTag("github_download_update_button")
+                                            ) {
+                                                Icon(Icons.Default.Download, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("تایید و دانلود مستقیم", fontWeight = FontWeight.Bold, color = Color.White)
+                                            }
+                                        }
+                                    }
+
+                                    is ApkDownloadState.Downloading -> {
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(12.dp),
+                                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = "در حال دانلود فایل نصب...",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = IncomeGreen
+                                                    )
+                                                    Text(
+                                                        text = "${PersianNumberFormatter.formatDigits(dl.progressPercent, userPreferences.currency)}٪",
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = IncomeGreen
+                                                    )
+                                                }
+                                                LinearProgressIndicator(
+                                                    progress = { (dl.progressPercent / 100f).coerceIn(0f, 1f) },
+                                                    color = IncomeGreen,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(8.dp)
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                )
+                                                if (dl.totalBytes > 0L) {
+                                                    Text(
+                                                        text = PersianNumberFormatter.formatDigits(
+                                                            "${GitHubUpdateHelper.formatFileSizeMb(dl.downloadedBytes)} از ${GitHubUpdateHelper.formatFileSizeMb(dl.totalBytes)}",
+                                                            userPreferences.currency
+                                                        ),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.outline
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    is ApkDownloadState.Completed -> {
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                            border = BorderStroke(1.dp, IncomeGreen.copy(alpha = 0.5f)),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(12.dp),
+                                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = "دانلود با موفقیت کامل شد ✓",
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = IncomeGreen
+                                                )
+                                                Text(
+                                                    text = "فایل «${dl.fileName}» ذخیره شد. برای نصب، روی اعلان دانلود در نوار بالای گوشی بزنید یا پوشه دانلودها را باز کنید.",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Button(
+                                                    onClick = { GitHubUpdateHelper.openSystemDownloads(context) },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = IncomeGreen),
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Icon(Icons.Default.FolderOpen, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("باز کردن دانلودها برای نصب", fontWeight = FontWeight.Bold, color = Color.White)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    is ApkDownloadState.Failed -> {
+                                        Text(
+                                            text = dl.message,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = { GitHubUpdateHelper.openUrlInBrowser(context, rel.apkDownloadUrl ?: rel.releasePageUrl) },
+                                                shape = RoundedCornerShape(12.dp),
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Text("دانلود از مرورگر", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                            Button(
+                                                onClick = {
+                                                    val apkUrl = rel.apkDownloadUrl
+                                                    if (apkUrl != null) {
+                                                        startApkDownload(apkUrl, rel.versionTag, rel.apkFileName)
+                                                    }
+                                                },
+                                                shape = RoundedCornerShape(12.dp),
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Text("تلاش مجدد", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    is GitHubUpdateResult.UpToDate -> {
+                        val rel = result.release
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = IncomeGreen,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Text(
+                                        text = "برنامه شما به‌روز است ✓",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = IncomeGreen
+                                    )
+                                }
+                                Text(
+                                    text = PersianNumberFormatter.formatDigits(
+                                        "آخرین نسخه منتشرشده: ${rel.versionTag}" +
+                                            if (rel.publishedPersianDate.isNotBlank()) " (${rel.publishedPersianDate})" else "",
+                                        userPreferences.currency
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    is GitHubUpdateResult.TagOnlyInfo -> {
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = if (result.isNewer) IncomeGreen.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, (if (result.isNewer) IncomeGreen else MaterialTheme.colorScheme.outline).copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = if (result.isNewer) {
+                                        "برچسب نسخه جدید (${PersianNumberFormatter.formatDigits(result.latestTag, userPreferences.currency)}) در گیت‌هاب ثبت شده است"
+                                    } else {
+                                        "برنامه با آخرین نسخه گیت‌هاب (${PersianNumberFormatter.formatDigits(result.latestTag, userPreferences.currency)}) هماهنگ است ✓"
+                                    },
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (result.isNewer) {
+                                    Text(
+                                        text = "برای دریافت فایل نصب از صفحه انتشارها یا بیلدهای Actions استفاده کنید.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                    Button(
+                                        onClick = { GitHubUpdateHelper.openUrlInBrowser(context, result.releasesPageUrl) },
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("باز کردن صفحه دریافت نسخه", fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    is GitHubUpdateResult.NoReleaseYet -> {
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "فعلاً نسخه جدیدتری منتشر نشده است ✓",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                val buildDetails = if (result.latestRunNumber != null) {
+                                    "آخرین بیلد موفق در گیت‌هاب (#${PersianNumberFormatter.formatDigits(result.latestRunNumber, userPreferences.currency)})" +
+                                        (result.latestRunDatePersian?.takeIf { it.isNotBlank() }?.let { " در تاریخ $it" } ?: "") +
+                                        " ثبت شده است، اما هنوز Release جدیدی منتشر نشده است."
+                                } else {
+                                    "هنوز نسخه رسمی (Release) جدیدی در گیت‌هاب منتشر نشده است."
+                                }
+                                Text(
+                                    text = buildDetails,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    is GitHubUpdateResult.Error -> {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.45f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.ErrorOutline,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                                Text(
+                                    text = result.message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Bottom Re-check & Close actions (when not showing the UpdateAvailable confirmation step)
+                if (updateState !is GitHubUpdateResult.UpdateAvailable && updateState !is GitHubUpdateResult.Loading) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("بستن")
+                        }
+                        Button(
+                            onClick = { runUpdateCheck() },
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("github_check_updates_button")
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("بررسی مجدد", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
 
