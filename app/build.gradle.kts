@@ -17,8 +17,8 @@ android {
     applicationId = "ir.mmd.dodota"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0.0"
+    versionCode = 10001
+    versionName = "1.0.1"
 
     val defaultGithubRepo = (System.getenv("GITHUB_REPOSITORY") ?: "").trim().replace("\"", "").ifBlank { "alovemamad/Dodota" }
     buildConfigField("String", "DEFAULT_GITHUB_REPO", "\"$defaultGithubRepo\"")
