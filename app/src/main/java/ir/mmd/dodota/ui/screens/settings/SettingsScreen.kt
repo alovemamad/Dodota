@@ -1155,7 +1155,7 @@ private fun GitHubUpdateDialog(
     fun runUpdateCheck() {
         updateState = GitHubUpdateResult.Loading
         coroutineScope.launch {
-            val result = GitHubUpdateHelper.checkForUpdates(GitHubUpdateHelper.PROJECT_GITHUB_REPO)
+            val result = GitHubUpdateHelper.checkForUpdates(GitHubUpdateHelper.effectiveRepoSlug())
             updateState = result
             when (result) {
                 is GitHubUpdateResult.UpdateAvailable -> onRecordCheck(result.release.cleanVersion)
@@ -1451,6 +1451,12 @@ private fun GitHubUpdateDialog(
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = MaterialTheme.colorScheme.outline
                                                     )
+                                                }
+                                                TextButton(
+                                                    onClick = { GitHubUpdateHelper.openUrlInBrowser(context, rel.apkDownloadUrl ?: rel.releasePageUrl) },
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text("دریافت از مرورگر", style = MaterialTheme.typography.labelSmall)
                                                 }
                                             }
                                         }

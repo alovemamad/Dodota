@@ -180,9 +180,11 @@ object GitHubUpdateHelper {
         OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
+            .cache(null)
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
                     .header("Accept", "application/vnd.github+json")
+                    .header("Cache-Control", "no-cache")
                     .header("User-Agent", "Dodota-Android/${BuildConfig.VERSION_NAME}")
                     .build()
                 chain.proceed(request)
@@ -282,20 +284,37 @@ object GitHubUpdateHelper {
         val actionsUrl = "https://github.com/$normalized/actions"
 
         try {
-            val latestResponse = apiService.getLatestRelease(owner, repo)
+            val releasesResponse = apiService.getReleases(owner, repo, perPage = 10)
             val releaseDto: GitHubReleaseDto? = when {
-                latestResponse.isSuccessful -> latestResponse.body()
-                latestResponse.code() == 404 -> {
-                    val listResp = apiService.getReleases(owner, repo)
-                    if (listResp.isSuccessful) {
-                        listResp.body()?.firstOrNull { !it.draft }
-                    } else null
+                releasesResponse.isSuccessful -> {
+                    val candidates = releasesResponse.body().orEmpty().filter { !it.draft && it.tagName.isNotBlank() }
+                    val stable = candidates.filter { !it.prerelease }
+                    val pool = stable.ifEmpty { candidates }
+                    pool.maxWithOrNull { a, b ->
+                        val cmp = compareSemanticVersions(a.tagName, b.tagName)
+                        if (cmp != 0) cmp
+                        else {
+                            val aHasApk = a.assets.any { it.name.endsWith(".apk", ignoreCase = true) }
+                            val bHasApk = b.assets.any { it.name.endsWith(".apk", ignoreCase = true) }
+                            aHasApk.compareTo(bHasApk)
+                        }
+                    }
                 }
-                latestResponse.code() == 403 || latestResponse.code() == 429 -> {
+                releasesResponse.code() == 403 || releasesResponse.code() == 429 -> {
                     return@withContext GitHubUpdateResult.Error("محدودیت درخواست گیت‌هاب موقتاً فعال شده است. لطفاً چند دقیقه دیگر دوباره تلاش کنید.")
                 }
                 else -> {
-                    return@withContext GitHubUpdateResult.Error("خطا در ارتباط با گیت‌هاب (کد ${PersianNumberFormatter.formatDigits(latestResponse.code())})")
+                    val latestResponse = apiService.getLatestRelease(owner, repo)
+                    when {
+                        latestResponse.isSuccessful -> latestResponse.body()
+                        latestResponse.code() == 403 || latestResponse.code() == 429 -> {
+                            return@withContext GitHubUpdateResult.Error("محدودیت درخواست گیت‌هاب موقتاً فعال شده است. لطفاً چند دقیقه دیگر دوباره تلاش کنید.")
+                        }
+                        latestResponse.code() == 404 -> null
+                        else -> {
+                            return@withContext GitHubUpdateResult.Error("خطا در ارتباط با گیت‌هاب (کد ${PersianNumberFormatter.formatDigits(latestResponse.code())})")
+                        }
+                    }
                 }
             }
 
@@ -381,6 +400,8 @@ object GitHubUpdateHelper {
             val request = DownloadManager.Request(Uri.parse(downloadUrl)).apply {
                 setTitle("بروزرسانی دودوتا ($versionTag)")
                 setDescription("در حال دانلود نسخه جدید برنامه...")
+                addRequestHeader("User-Agent", "Dodota-Android/${BuildConfig.VERSION_NAME}")
+                addRequestHeader("Accept", "application/vnd.android.package-archive, application/octet-stream, */*")
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 setMimeType("application/vnd.android.package-archive")
                 setAllowedOverMetered(true)

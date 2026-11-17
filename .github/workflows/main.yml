@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APK & Auto Release
 
 on:
   push:
@@ -8,18 +8,20 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    # جلوگیری از حلقه: کامیت خود اکشن دوباره trigger نکند
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
-        token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: set up JDK 21
+    - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
         java-version: '21'
@@ -30,28 +32,123 @@ jobs:
       with:
         gradle-version: '9.3.1'
 
-    - name: Bump version automatically
+    - name: Calculate & Bump Next Version
       id: bump
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
       run: |
-        CURRENT_VERSION=$(grep -oP 'versionName\s*=?\s*"\K[^"]+' app/build.gradle.kts | head -1)
-        echo "Current version: $CURRENT_VERSION"
+        git fetch --tags --force || true
+        python3 - << 'EOF'
+        import json
+        import os
+        import re
+        import subprocess
+        import urllib.request
 
-        MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
-        MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
-        PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
-        NEW_PATCH=$((PATCH + 1))
-        NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
-        NEW_CODE=$((MAJOR * 10000 + MINOR * 100 + NEW_PATCH))
+        gradle_path = "app/build.gradle.kts"
+        with open(gradle_path, "r", encoding="utf-8") as f:
+            gradle_text = f.read()
 
-        echo "New version: $NEW_VERSION (code: $NEW_CODE)"
+        ver_match = re.search(r'versionName\s*=?\s*"([^"]+)"', gradle_text)
+        code_match = re.search(r'versionCode\s*=?\s*(\d+)', gradle_text)
+        if not ver_match or not code_match:
+            raise RuntimeError("Could not find versionName or versionCode in app/build.gradle.kts")
 
-        sed -i -E "s/versionName\s*=?\s*\"[^\"]*\"/versionName = \"$NEW_VERSION\"/" app/build.gradle.kts
-        sed -i -E "s/versionCode\s*=?\s*[0-9]+/versionCode = $NEW_CODE/" app/build.gradle.kts
+        gradle_ver_str = ver_match.group(1)
+        gradle_code = int(code_match.group(1))
 
-        echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-        echo "NEW_CODE=$NEW_CODE" >> $GITHUB_ENV
+        def parse_semver(s):
+            m = re.match(r'^v?(\d+)\.(\d+)\.(\d+)', s.strip(), re.IGNORECASE)
+            if not m:
+                return None
+            return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
 
-    - name: Create Keystores
+        gradle_ver = parse_semver(gradle_ver_str) or (1, 0, 0)
+        remote_versions = []
+
+        # 1. Read local/fetched git tags
+        tags_out = subprocess.check_output(["git", "tag", "-l"], text=True)
+        for line in tags_out.splitlines():
+            v = parse_semver(line)
+            if v:
+                remote_versions.append(v)
+
+        # 2. Query GitHub Releases & Tags API to ensure we never reuse or collide with an existing release
+        repo = os.environ.get("GITHUB_REPOSITORY", "")
+        token = os.environ.get("GITHUB_TOKEN", "")
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "Dodota-CI-Version-Bumper",
+        }
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        if repo:
+            for endpoint in [
+                f"https://api.github.com/repos/{repo}/releases?per_page=100",
+                f"https://api.github.com/repos/{repo}/tags?per_page=100",
+            ]:
+                try:
+                    req = urllib.request.Request(endpoint, headers=headers)
+                    with urllib.request.urlopen(req, timeout=15) as resp:
+                        items = json.loads(resp.read().decode("utf-8"))
+                        if isinstance(items, list):
+                            for item in items:
+                                tag = item.get("tag_name") or item.get("name") or ""
+                                v = parse_semver(tag)
+                                if v:
+                                    remote_versions.append(v)
+                except Exception as exc:
+                    print(f"Warning: failed to query {endpoint}: {exc}")
+
+        if remote_versions:
+            max_remote = max(remote_versions)
+            if gradle_ver > max_remote:
+                next_ver = gradle_ver
+            else:
+                next_ver = (max_remote[0], max_remote[1], max_remote[2] + 1)
+        else:
+            max_remote = None
+            next_ver = (gradle_ver[0], gradle_ver[1], gradle_ver[2] + 1)
+
+        new_version = f"{next_ver[0]}.{next_ver[1]}.{next_ver[2]}"
+        computed_code = next_ver[0] * 10000 + next_ver[1] * 100 + next_ver[2]
+        new_code = max(gradle_code + 1, computed_code)
+
+        print(f"Gradle version: {gradle_ver_str} (code {gradle_code})")
+        print(f"Latest GitHub release/tag version: {max_remote}")
+        print(f"Next version for this build: v{new_version} (versionCode={new_code})")
+
+        updated_gradle = re.sub(
+            r'(versionName\s*=?\s*)"[^"]+"',
+            rf'\g<1>"{new_version}"',
+            gradle_text,
+            count=1,
+        )
+        updated_gradle = re.sub(
+            r'(versionCode\s*=?\s*)\d+',
+            rf'\g<1>{new_code}',
+            updated_gradle,
+            count=1,
+        )
+        with open(gradle_path, "w", encoding="utf-8") as f:
+            f.write(updated_gradle)
+
+        github_env = os.environ.get("GITHUB_ENV")
+        if github_env:
+            with open(github_env, "a", encoding="utf-8") as env_file:
+                env_file.write(f"NEW_VERSION={new_version}\n")
+                env_file.write(f"NEW_CODE={new_code}\n")
+
+        summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary_path:
+            prev_label = f"v{max_remote[0]}.{max_remote[1]}.{max_remote[2]}" if max_remote else f"v{gradle_ver_str}"
+            with open(summary_path, "a", encoding="utf-8") as sf:
+                sf.write(f"### Version Bump\n- Previous latest: `{prev_label}`\n- New build & release version: **`v{new_version}`** (`versionCode = {new_code}`)\n")
+        EOF
+
+    - name: Prepare Keystores
       run: |
         if [ ! -f my-upload-key.jks ]; then
           keytool -genkeypair -v -keystore my-upload-key.jks -storepass dodota123456 -alias upload -keypass dodota123456 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Dodota,OU=Finance,O=DodotaApp,L=Tehran,ST=Tehran,C=IR"
@@ -69,37 +166,37 @@ jobs:
         KEY_PASSWORD: dodota123456
       run: gradle assembleRelease assembleDebug
 
-    - name: Upload Release APK (artifact)
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-release
-        path: app/build/outputs/apk/release/app-release.apk
+    - name: Prepare Versioned Release APK
+      if: success()
+      run: |
+        cp app/build/outputs/apk/release/app-release.apk "Dodota-v${NEW_VERSION}-release.apk"
+        ls -lh "Dodota-v${NEW_VERSION}-release.apk"
 
-    - name: Upload Debug APK (artifact)
+    - name: Upload Release APK Artifact
+      if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: app-debug
+        name: app-release-v${{ env.NEW_VERSION }}
+        path: Dodota-v${{ env.NEW_VERSION }}-release.apk
+
+    - name: Upload Debug APK Artifact
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug-v${{ env.NEW_VERSION }}
         path: app/build/outputs/apk/debug/app-debug.apk
 
-    # ۱) نسخه‌ی جدید را در مخزن ثبت کن
-    - name: Commit version bump
-      if: github.ref == 'refs/heads/main'
-      run: |
-        git config user.name  "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add app/build.gradle.kts
-        git commit -m "chore: bump version to ${{ env.NEW_VERSION }} [skip ci]" || echo "nothing to commit"
-        git push
-
-    # ۲) Release بساز و APK را ضمیمه کن
-    - name: Create Release and Upload APK
-      if: github.ref == 'refs/heads/main'
+    - name: Create New GitHub Release (After Build Success)
+      if: success() && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
       uses: softprops/action-gh-release@v2
       with:
         tag_name: v${{ env.NEW_VERSION }}
+        target_commitish: ${{ github.sha }}
         name: Release v${{ env.NEW_VERSION }}
-        files: app/build/outputs/apk/release/app-release.apk
+        files: Dodota-v${{ env.NEW_VERSION }}-release.apk
+        fail_on_unmatched_files: true
         generate_release_notes: true
+        make_latest: 'true'
         draft: false
         prerelease: false
       env:
