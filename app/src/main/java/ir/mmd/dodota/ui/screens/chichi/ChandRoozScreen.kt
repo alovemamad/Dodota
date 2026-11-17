@@ -37,9 +37,16 @@ import ir.mmd.dodota.data.model.ChandRoozCategory
 import ir.mmd.dodota.data.model.ChandRoozRecordEntity
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
+import androidx.compose.ui.platform.LocalContext
+import ir.mmd.dodota.ui.components.DodotaPrintDialog
+import ir.mmd.dodota.ui.components.DodotaPrintIconButton
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.GlassCard
+import ir.mmd.dodota.ui.components.PrintDatePreset
+import ir.mmd.dodota.ui.components.PrintableSubSection
 import ir.mmd.dodota.ui.theme.LocalDodotaGlassStyle
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianDate
 import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
@@ -61,6 +68,8 @@ fun ChandRoozScreen(
     var showAddEditDialog by remember { mutableStateOf(false) }
     var recordToEdit by remember { mutableStateOf<ChandRoozRecordEntity?>(null) }
     var recordToDelete by remember { mutableStateOf<ChandRoozRecordEntity?>(null) }
+    var showPrintDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     // Filtered records
     val filteredRecords = remember(allRecords, selectedFilterCategory, searchQuery) {
@@ -95,7 +104,13 @@ fun ChandRoozScreen(
         topBar = {
             DodotaTopBar(
                 title = "چندروز؟ (چی‌چی پلاس)",
-                onBackClick = onBack
+                onBackClick = onBack,
+                actions = {
+                    DodotaPrintIconButton(
+                        onClick = { showPrintDialog = true },
+                        testTag = "chand_rooz_print_button"
+                    )
+                }
             )
         },
         floatingActionButton = {
@@ -596,6 +611,47 @@ fun ChandRoozScreen(
                 TextButton(onClick = { recordToDelete = null }) {
                     Text("انصراف")
                 }
+            }
+        )
+    }
+
+    if (showPrintDialog) {
+        val subSections = remember {
+            listOf(
+                PrintableSubSection("mission", "ماموریت‌ها", "سوابق روزهای ماموریت"),
+                PrintableSubSection("leave", "مرخصی‌ها", "سوابق روزهای مرخصی"),
+                PrintableSubSection("sick", "استعلاجی‌ها", "سوابق روزهای استعلاجی"),
+                PrintableSubSection("bank", "بانک", "مراجعه‌ها و کارهای بانکی"),
+                PrintableSubSection("other", "سایر موارد", "سایر رویدادهای ثبت‌شده")
+            )
+        }
+        DodotaPrintDialog(
+            sectionTitle = "چندروز؟",
+            userPreferences = userPreferences,
+            supportsDateRange = true,
+            initialPreset = PrintDatePreset.ALL,
+            subSections = subSections,
+            countProvider = { key, s, e ->
+                fun inRange(ms: Long) = (s == null || ms >= s) && (e == null || ms <= e)
+                val cat = when (key) {
+                    "mission" -> ChandRoozCategory.MISSION
+                    "leave" -> ChandRoozCategory.LEAVE
+                    "sick" -> ChandRoozCategory.SICK_LEAVE
+                    "bank" -> ChandRoozCategory.BANK
+                    "other" -> ChandRoozCategory.OTHER
+                    else -> null
+                }
+                if (cat == null) null
+                else allRecords.count { it.category == cat && (inRange(it.startDateMillis) || inRange(it.endDateMillis)) }
+            },
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                val doc = DodotaPrintBuilders.buildChandRoozDocument(
+                    payload = payload,
+                    records = allRecords,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
             }
         )
     }

@@ -43,6 +43,8 @@ import ir.mmd.dodota.ui.components.*
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.util.AlarmHelper
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
@@ -94,6 +96,7 @@ fun DebtsScreen(
     var itemToDelete by remember { mutableStateOf<DebtEntity?>(null) }
     var itemForQuickReminder by remember { mutableStateOf<DebtEntity?>(null) }
     var itemForQuickPayment by remember { mutableStateOf<DebtEntity?>(null) }
+    var showPrintDialog by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -158,6 +161,10 @@ fun DebtsScreen(
                 title = sideTitle,
                 onBackClick = onBack,
                 actions = {
+                    DodotaPrintIconButton(
+                        onClick = { showPrintDialog = true },
+                        testTag = "debts_print_button"
+                    )
                     // Item 12: Only a small filter icon in the top bar
                     Box(modifier = Modifier.padding(end = 6.dp)) {
                         IconButton(
@@ -697,6 +704,43 @@ fun DebtsScreen(
                 TextButton(onClick = { itemToDelete = null }) {
                     Text("انصراف")
                 }
+            }
+        )
+    }
+
+    if (showPrintDialog) {
+        val debtSubSections = remember(selectedSide) {
+            listOf(
+                PrintableSubSection("debts_owe", "بدهی‌های من", "مبالغی که باید پرداخت شود", defaultSelected = selectedSide == DebtType.DEBT_I_OWE),
+                PrintableSubSection("receivables", "طلب‌های من", "مبالغی که باید دریافت شود", defaultSelected = selectedSide == DebtType.RECEIVABLE_OWED_TO_ME),
+                PrintableSubSection("active_only", "موارد در جریان (فعال)", "بدهی‌ها یا طلب‌های تسویه‌نشده"),
+                PrintableSubSection("settled_only", "موارد تسویه‌شده", "موارد باقیمانده صفر", defaultSelected = false)
+            )
+        }
+        DodotaPrintDialog(
+            sectionTitle = "بدهی و طلب",
+            userPreferences = userPreferences,
+            supportsDateRange = true,
+            initialPreset = PrintDatePreset.ALL,
+            subSections = debtSubSections,
+            countProvider = { key, s, e ->
+                fun inRange(ms: Long) = (s == null || ms >= s) && (e == null || ms <= e)
+                when (key) {
+                    "debts_owe" -> nonCheckDebts.count { it.type == DebtType.DEBT_I_OWE && inRange(it.dueDateMillis ?: it.startDateMillis) }
+                    "receivables" -> nonCheckDebts.count { it.type == DebtType.RECEIVABLE_OWED_TO_ME && inRange(it.dueDateMillis ?: it.startDateMillis) }
+                    "active_only" -> nonCheckDebts.count { it.status != DebtStatus.SETTLED && it.paidAmount < it.totalAmount && inRange(it.dueDateMillis ?: it.startDateMillis) }
+                    "settled_only" -> nonCheckDebts.count { (it.status == DebtStatus.SETTLED || it.paidAmount >= it.totalAmount) && inRange(it.dueDateMillis ?: it.startDateMillis) }
+                    else -> null
+                }
+            },
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                val doc = DodotaPrintBuilders.buildDebtsDocument(
+                    payload = payload,
+                    debts = nonCheckDebts,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
             }
         )
     }

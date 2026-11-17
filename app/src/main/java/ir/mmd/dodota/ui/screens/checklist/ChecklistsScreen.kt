@@ -49,14 +49,19 @@ import androidx.compose.ui.window.DialogProperties
 import ir.mmd.dodota.data.model.*
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
+import ir.mmd.dodota.ui.components.DodotaPrintDialog
+import ir.mmd.dodota.ui.components.DodotaPrintIconButton
 import ir.mmd.dodota.ui.components.DodotaTextField
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.EmptyStateCard
 import ir.mmd.dodota.ui.components.GlassCard
 import ir.mmd.dodota.ui.components.GraphicalFormDialog
 import ir.mmd.dodota.ui.components.PersianAmountInput
+import ir.mmd.dodota.ui.components.PrintableSubSection
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
 
@@ -111,6 +116,7 @@ fun ChecklistsScreen(
     var checklistToEdit by remember { mutableStateOf<ChecklistEntity?>(null) }
     var itemToEdit by remember { mutableStateOf<ChecklistItemEntity?>(null) }
     var itemToConvertToExpense by remember { mutableStateOf<Pair<ChecklistItemEntity, String>?>(null) }
+    var showPrintDialog by remember { mutableStateOf(false) }
 
     val filteredChecklists = remember(checklists, selectedCategoryFilter) {
         val base = if (selectedCategoryFilter == "همه") checklists
@@ -123,7 +129,13 @@ fun ChecklistsScreen(
         topBar = {
             DodotaTopBar(
                 title = "چک‌لیست",
-                onBackClick = onBack
+                onBackClick = onBack,
+                actions = {
+                    DodotaPrintIconButton(
+                        onClick = { showPrintDialog = true },
+                        testTag = "checklists_print_button"
+                    )
+                }
             )
         },
         floatingActionButton = {
@@ -377,6 +389,38 @@ fun ChecklistsScreen(
                     Toast.makeText(context, "به عنوان هزینه در حساب ثبت شد ✓", Toast.LENGTH_SHORT).show()
                     itemToConvertToExpense = null
                 }
+            }
+        )
+    }
+
+    if (showPrintDialog) {
+        val filteredIds = remember(filteredChecklists) { filteredChecklists.map { it.id }.toSet() }
+        DodotaPrintDialog(
+            sectionTitle = if (selectedCategoryFilter == "همه") "چک‌لیست‌ها" else "چک‌لیست ($selectedCategoryFilter)",
+            userPreferences = userPreferences,
+            supportsDateRange = false,
+            subSections = listOf(
+                PrintableSubSection("unchecked", "اقلام انجام‌نشده (در انتظار)"),
+                PrintableSubSection("checked", "اقلام انجام‌شده")
+            ),
+            countProvider = { key, _, _ ->
+                when (key) {
+                    "unchecked" -> allItems.count { it.checklistId in filteredIds && !it.isChecked }
+                    "checked" -> allItems.count { it.checklistId in filteredIds && it.isChecked }
+                    else -> null
+                }
+            },
+            showNotesToggle = false,
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                showPrintDialog = false
+                val doc = DodotaPrintBuilders.buildChecklistsDocument(
+                    payload = payload,
+                    checklists = filteredChecklists,
+                    allItems = allItems,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
             }
         )
     }

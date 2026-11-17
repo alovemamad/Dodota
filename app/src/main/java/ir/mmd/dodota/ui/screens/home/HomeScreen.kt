@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,8 +33,14 @@ import ir.mmd.dodota.data.model.*
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.ui.components.CategoryIconView
 import ir.mmd.dodota.ui.components.DodotaExpandableSection
+import ir.mmd.dodota.ui.components.DodotaPrintDialog
+import ir.mmd.dodota.ui.components.DodotaPrintIconButton
 import ir.mmd.dodota.ui.components.GlassCard
+import ir.mmd.dodota.ui.components.PrintDatePreset
+import ir.mmd.dodota.ui.components.PrintableSubSection
 import ir.mmd.dodota.ui.theme.*
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 
@@ -59,8 +66,17 @@ fun HomeScreen(
     onNavigateToChecks: () -> Unit = {},
     onNavigateToBahesab: () -> Unit = {},
     onNavigateToChandRooz: () -> Unit = {},
-    onToggleBalanceVisibility: () -> Unit = {}
+    onToggleBalanceVisibility: () -> Unit = {},
+    debts: List<DebtEntity> = emptyList(),
+    installmentPlans: List<InstallmentPlanEntity> = emptyList(),
+    allInstallments: List<InstallmentEntity> = emptyList(),
+    allBudgets: List<BudgetEntity> = emptyList(),
+    goals: List<FinancialGoalEntity> = emptyList(),
+    assets: List<AssetEntity> = emptyList(),
+    chandRoozRecords: List<ChandRoozRecordEntity> = emptyList()
 ) {
+    val context = LocalContext.current
+    var showPrintDialog by remember { mutableStateOf(false) }
     val isBalanceVisible = !userPreferences.isBalanceHidden
     val activeAccounts = remember(accounts) { accounts.filter { it.isActive } }
     val totalBalance = activeAccounts.sumOf { it.balance }
@@ -151,7 +167,14 @@ fun HomeScreen(
                         )
                     }
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        DodotaPrintIconButton(
+                            onClick = { showPrintDialog = true },
+                            testTag = "home_print_button"
+                        )
                         Surface(
                             shape = RoundedCornerShape(14.dp),
                             color = glassStyle.cardContainerColor,
@@ -699,6 +722,63 @@ fun HomeScreen(
                 }
             }
         }
+    }
+
+    if (showPrintDialog) {
+        val homeSubSections = remember {
+            listOf(
+                PrintableSubSection("accounts", "حساب‌ها و موجودی‌ها", "لیست حساب‌ها، شماره کارت و مانده"),
+                PrintableSubSection("transactions", "تراکنش‌ها", "درآمد، هزینه و انتقال‌های بازه انتخابی"),
+                PrintableSubSection("debts", "بدهی‌ها و طلب‌ها", "وضعیت تسویه و سررسید", defaultSelected = false),
+                PrintableSubSection("checks", "چک‌ها", "چک‌های دریافتی و پرداختی", defaultSelected = false),
+                PrintableSubSection("installments", "اقساط و وام‌ها", "اقساط بازه و وضعیت طرح‌ها", defaultSelected = false),
+                PrintableSubSection("budgets", "بودجه‌بندی ماه جاری", "مقایسه سقف بودجه و مصرف", defaultSelected = false),
+                PrintableSubSection("goals", "اهداف مالی", "پیشرفت پس‌انداز اهداف", defaultSelected = false),
+                PrintableSubSection("assets", "دارایی‌ها و ارزش خالص", "اموال و سرمایه‌ها", defaultSelected = false),
+                PrintableSubSection("chandrooz", "چندروز؟ (رویدادها)", "ماموریت، مرخصی، استعلاجی، بانک", defaultSelected = false)
+            )
+        }
+        DodotaPrintDialog(
+            sectionTitle = "گزارش جامع مالی",
+            userPreferences = userPreferences,
+            supportsDateRange = true,
+            initialPreset = PrintDatePreset.THIS_MONTH,
+            subSections = homeSubSections,
+            countProvider = { key, s, e ->
+                fun inRange(ms: Long) = (s == null || ms >= s) && (e == null || ms <= e)
+                when (key) {
+                    "accounts" -> activeAccounts.size
+                    "transactions" -> allTransactions.count { inRange(it.dateMillis) }
+                    "debts" -> debts.count { !it.isCheck && inRange(it.dueDateMillis ?: it.startDateMillis) }
+                    "checks" -> debts.count { (it.isCheck || it.personOrCompanyName.contains("چک") || it.notes.contains("چک")) && inRange(it.dueDateMillis ?: it.startDateMillis) }
+                    "installments" -> allInstallments.count { inRange(it.dueDateMillis) }
+                    "budgets" -> allBudgets.size
+                    "goals" -> goals.size
+                    "assets" -> assets.size
+                    "chandrooz" -> chandRoozRecords.count { inRange(it.startDateMillis) || inRange(it.endDateMillis) }
+                    else -> null
+                }
+            },
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                val doc = DodotaPrintBuilders.buildHomeMasterDocument(
+                    payload = payload,
+                    accounts = accounts,
+                    transactions = allTransactions,
+                    categories = categories,
+                    debts = debts,
+                    installmentPlans = installmentPlans,
+                    allInstallments = allInstallments,
+                    budgets = allBudgets,
+                    goals = goals,
+                    assets = assets,
+                    netWorth = netWorth,
+                    chandRoozRecords = chandRoozRecords,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
+            }
+        )
     }
 }
 

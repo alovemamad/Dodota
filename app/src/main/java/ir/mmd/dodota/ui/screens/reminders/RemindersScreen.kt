@@ -35,6 +35,8 @@ import ir.mmd.dodota.ui.theme.IncomeGreen
 import androidx.compose.ui.platform.testTag
 import ir.mmd.dodota.util.AlarmHelper
 import ir.mmd.dodota.util.AlarmSoundManager
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
@@ -53,6 +55,7 @@ fun RemindersScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var reminderToEdit by remember { mutableStateOf<ReminderEntity?>(null) }
     var reminderToDelete by remember { mutableStateOf<ReminderEntity?>(null) }
+    var showPrintDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -84,7 +87,13 @@ fun RemindersScreen(
         topBar = {
             DodotaTopBar(
                 title = "مرکز یادآورها و آلارم سررسید",
-                onBackClick = onBack
+                onBackClick = onBack,
+                actions = {
+                    DodotaPrintIconButton(
+                        onClick = { showPrintDialog = true },
+                        testTag = "reminders_print_button"
+                    )
+                }
             )
         },
         floatingActionButton = {
@@ -404,6 +413,40 @@ fun RemindersScreen(
                 TextButton(onClick = { reminderToDelete = null }) {
                     Text("انصراف")
                 }
+            }
+        )
+    }
+
+    if (showPrintDialog) {
+        DodotaPrintDialog(
+            sectionTitle = selectedTypeFilter?.let { "یادآورها (${it.title})" } ?: "مرکز یادآورها و سررسیدها",
+            userPreferences = userPreferences,
+            supportsDateRange = true,
+            initialPreset = PrintDatePreset.ALL,
+            subSections = listOf(
+                PrintableSubSection("active_reminders", "یادآورهای فعال و پیش‌رو"),
+                PrintableSubSection("completed_reminders", "یادآورهای تکمیل‌شده")
+            ),
+            countProvider = { key, startMillis, endMillis ->
+                val inDate = filteredReminders.filter { r ->
+                    (startMillis == null || r.dueDateTimeMillis >= startMillis) &&
+                        (endMillis == null || r.dueDateTimeMillis <= endMillis)
+                }
+                when (key) {
+                    "active_reminders" -> inDate.count { !it.isCompleted }
+                    "completed_reminders" -> inDate.count { it.isCompleted }
+                    else -> null
+                }
+            },
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                showPrintDialog = false
+                val doc = DodotaPrintBuilders.buildRemindersDocument(
+                    payload = payload,
+                    reminders = filteredReminders,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
             }
         )
     }

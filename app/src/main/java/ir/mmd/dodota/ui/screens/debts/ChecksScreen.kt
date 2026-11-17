@@ -39,6 +39,8 @@ import ir.mmd.dodota.data.repository.DodotaRepository
 import ir.mmd.dodota.ui.components.*
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.util.AlarmHelper
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
@@ -74,6 +76,7 @@ fun ChecksScreen(
     var checkToEdit by remember { mutableStateOf<DebtEntity?>(null) }
     var checkToDelete by remember { mutableStateOf<DebtEntity?>(null) }
     var checkForQuickPay by remember { mutableStateOf<DebtEntity?>(null) }
+    var showPrintDialog by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -89,7 +92,13 @@ fun ChecksScreen(
         topBar = {
             DodotaTopBar(
                 title = "چک‌ها",
-                onBackClick = onBack
+                onBackClick = onBack,
+                actions = {
+                    DodotaPrintIconButton(
+                        onClick = { showPrintDialog = true },
+                        testTag = "checks_print_button"
+                    )
+                }
             )
         },
         floatingActionButton = {
@@ -551,6 +560,39 @@ fun ChecksScreen(
                 TextButton(onClick = { checkToDelete = null }) {
                     Text("انصراف")
                 }
+            }
+        )
+    }
+
+    if (showPrintDialog) {
+        val subSections = remember {
+            listOf(
+                PrintableSubSection("pending_checks", "چک‌های در جریان", "چک‌های سررسیددار و پاس‌نشده"),
+                PrintableSubSection("settled_checks", "چک‌های پاس‌شده", "چک‌های تسویه‌شده")
+            )
+        }
+        DodotaPrintDialog(
+            sectionTitle = "چک‌ها",
+            userPreferences = userPreferences,
+            supportsDateRange = true,
+            initialPreset = PrintDatePreset.ALL,
+            subSections = subSections,
+            countProvider = { key, s, e ->
+                fun inRange(ms: Long) = (s == null || ms >= s) && (e == null || ms <= e)
+                when (key) {
+                    "pending_checks" -> checkItems.count { it.status != DebtStatus.SETTLED && it.paidAmount < it.totalAmount && inRange(it.dueDateMillis ?: it.startDateMillis) }
+                    "settled_checks" -> checkItems.count { (it.status == DebtStatus.SETTLED || it.paidAmount >= it.totalAmount) && inRange(it.dueDateMillis ?: it.startDateMillis) }
+                    else -> null
+                }
+            },
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                val doc = DodotaPrintBuilders.buildChecksDocument(
+                    payload = payload,
+                    debts = checkItems,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
             }
         )
     }

@@ -107,6 +107,7 @@ fun DodotaApp(
     val assets by repository.allAssets.collectAsState(initial = emptyList())
     val netWorth by repository.netWorth.collectAsState(initial = 0L)
     val allBudgets by repository.allBudgets.collectAsState(initial = emptyList())
+    val chandRoozRecords by repository.allChandRoozRecords.collectAsState(initial = emptyList())
     val activeAlarm by AlarmSoundManager.activeAlarmState.collectAsState()
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -588,6 +589,13 @@ fun DodotaApp(
                     upcomingInstallments = upcomingInstallments,
                     activeReminders = activeReminders,
                     netWorth = netWorth,
+                    debts = debts,
+                    installmentPlans = installmentPlans,
+                    allInstallments = allInstallments,
+                    allBudgets = allBudgets,
+                    goals = goals,
+                    assets = assets,
+                    chandRoozRecords = chandRoozRecords,
                     onNavigateToAddTransaction = { type ->
                         navController.navigate(Screen.AddTransaction.createRoute(type))
                     },
@@ -822,6 +830,7 @@ fun DodotaApp(
                     transactions = transactions,
                     categories = categories,
                     userPreferences = userPreferences,
+                    accounts = accounts,
                     onBack = null
                 )
             }

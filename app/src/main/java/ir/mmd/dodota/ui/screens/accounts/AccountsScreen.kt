@@ -35,11 +35,17 @@ import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
 import ir.mmd.dodota.ui.components.CategoryIconView
 import ir.mmd.dodota.ui.components.DodotaDropdownField
+import ir.mmd.dodota.ui.components.DodotaPrintDialog
+import ir.mmd.dodota.ui.components.DodotaPrintIconButton
 import ir.mmd.dodota.ui.components.DodotaTextField
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.GlassCard
 import ir.mmd.dodota.ui.components.GraphicalFormDialog
 import ir.mmd.dodota.ui.components.PersianAmountInput
+import ir.mmd.dodota.ui.components.PrintDatePreset
+import ir.mmd.dodota.ui.components.PrintableSubSection
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
 
@@ -56,6 +62,7 @@ fun AccountsScreen(
     var showInternalTransferDialog by remember { mutableStateOf(false) }
     var accountToEdit by remember { mutableStateOf<AccountEntity?>(null) }
     var accountToDelete by remember { mutableStateOf<AccountEntity?>(null) }
+    var showPrintDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val activeAccounts = remember(accounts) { accounts.filter { it.isActive } }
@@ -68,6 +75,10 @@ fun AccountsScreen(
                 title = "مدیریت حساب‌ها",
                 onBackClick = onBack,
                 actions = {
+                    DodotaPrintIconButton(
+                        onClick = { showPrintDialog = true },
+                        testTag = "accounts_print_button"
+                    )
                     IconButton(onClick = onNavigateToCardsManager) {
                         Icon(
                             Icons.Default.CreditCard,
@@ -362,6 +373,42 @@ fun AccountsScreen(
                 TextButton(onClick = { accountToDelete = null }) {
                     Text("انصراف")
                 }
+            }
+        )
+    }
+
+    if (showPrintDialog) {
+        val accSubSections = remember(accounts) {
+            buildList {
+                add(PrintableSubSection("active_accounts", "حساب‌های فعال", "حساب‌ها و کیف‌پول‌های فعال"))
+                add(PrintableSubSection("card_details", "درج شماره کارت و شبا", "نمایش جزئیات کارت بانکی در جدول"))
+                if (accounts.any { !it.isActive }) {
+                    add(PrintableSubSection("inactive_accounts", "حساب‌های غیرفعال", "حساب‌های آرشیو شده", defaultSelected = false))
+                }
+            }
+        }
+        DodotaPrintDialog(
+            sectionTitle = "حساب‌ها",
+            userPreferences = userPreferences,
+            supportsDateRange = false,
+            initialPreset = PrintDatePreset.ALL,
+            subSections = accSubSections,
+            showNotesToggle = false,
+            countProvider = { key, _, _ ->
+                when (key) {
+                    "active_accounts" -> accounts.count { it.isActive }
+                    "inactive_accounts" -> accounts.count { !it.isActive }
+                    else -> null
+                }
+            },
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                val doc = DodotaPrintBuilders.buildAccountsDocument(
+                    payload = payload,
+                    accounts = accounts,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
             }
         )
     }

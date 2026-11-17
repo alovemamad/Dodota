@@ -34,14 +34,20 @@ import ir.mmd.dodota.data.model.DebtPaymentEntity
 import ir.mmd.dodota.data.model.DebtType
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
+import ir.mmd.dodota.ui.components.DodotaPrintDialog
+import ir.mmd.dodota.ui.components.DodotaPrintIconButton
 import ir.mmd.dodota.ui.components.DodotaTextField
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.EmptyStateCard
 import ir.mmd.dodota.ui.components.GlassCard
 import ir.mmd.dodota.ui.components.GraphicalFormDialog
 import ir.mmd.dodota.ui.components.PersianAmountInput
+import ir.mmd.dodota.ui.components.PrintDatePreset
+import ir.mmd.dodota.ui.components.PrintableSubSection
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
@@ -64,6 +70,7 @@ fun DebtDetailScreen(
 
     var showPaymentDialog by remember { mutableStateOf(false) }
     var paymentToDelete by remember { mutableStateOf<DebtPaymentEntity?>(null) }
+    var showPrintDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -72,7 +79,15 @@ fun DebtDetailScreen(
         topBar = {
             DodotaTopBar(
                 title = debt?.personOrCompanyName ?: "جزئیات تسویه",
-                onBackClick = onBack
+                onBackClick = onBack,
+                actions = {
+                    if (debt != null) {
+                        DodotaPrintIconButton(
+                            onClick = { showPrintDialog = true },
+                            testTag = "debt_detail_print_button"
+                        )
+                    }
+                }
             )
         },
         floatingActionButton = {
@@ -472,6 +487,40 @@ fun DebtDetailScreen(
                 TextButton(onClick = { paymentToDelete = null }) {
                     Text("انصراف")
                 }
+            }
+        )
+    }
+
+    if (showPrintDialog && debt != null) {
+        val subSections = remember {
+            listOf(
+                PrintableSubSection("debt_summary", "مشخصات و وضعیت تسویه", "مبلغ کل، پرداخت‌شده و مانده"),
+                PrintableSubSection("payments", "تاریخچه پرداخت‌ها / وصول‌ها", "جدول ریز پرداختی‌های ثبت‌شده")
+            )
+        }
+        DodotaPrintDialog(
+            sectionTitle = debt!!.personOrCompanyName,
+            userPreferences = userPreferences,
+            supportsDateRange = true,
+            initialPreset = PrintDatePreset.ALL,
+            subSections = subSections,
+            countProvider = { key, s, e ->
+                fun inRange(ms: Long) = (s == null || ms >= s) && (e == null || ms <= e)
+                when (key) {
+                    "payments" -> payments.count { inRange(it.dateMillis) }
+                    else -> null
+                }
+            },
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                val doc = DodotaPrintBuilders.buildDebtDetailDocument(
+                    payload = payload,
+                    debt = debt!!,
+                    payments = payments,
+                    accounts = accounts,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
             }
         )
     }

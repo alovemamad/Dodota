@@ -39,14 +39,20 @@ import ir.mmd.dodota.data.model.InstallmentEntity
 import ir.mmd.dodota.data.model.ReminderTargetType
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
+import ir.mmd.dodota.ui.components.DodotaPrintDialog
+import ir.mmd.dodota.ui.components.DodotaPrintIconButton
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.GlassCard
 import ir.mmd.dodota.ui.components.GraphicalFormDialog
 import ir.mmd.dodota.ui.components.PersianAmountInput
 import ir.mmd.dodota.ui.components.PersianDatePickerDialog
+import ir.mmd.dodota.ui.components.PrintDatePreset
+import ir.mmd.dodota.ui.components.PrintableSubSection
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.util.AlarmHelper
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
@@ -74,6 +80,7 @@ fun InstallmentDetailScreen(
     var showEditPlanDialog by remember { mutableStateOf(false) }
     var showDeletePlanDialog by remember { mutableStateOf(false) }
     var installmentToEdit by remember { mutableStateOf<InstallmentEntity?>(null) }
+    var showPrintDialog by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -89,6 +96,10 @@ fun InstallmentDetailScreen(
                 onBackClick = onBack,
                 actions = {
                     if (plan != null) {
+                        DodotaPrintIconButton(
+                            onClick = { showPrintDialog = true },
+                            testTag = "installment_detail_print_button"
+                        )
                         IconButton(onClick = { showEditPlanDialog = true }) {
                             Icon(
                                 imageVector = Icons.Outlined.Edit,
@@ -833,6 +844,43 @@ fun InstallmentDetailScreen(
                 )
             }
         }
+    }
+
+    if (showPrintDialog && plan != null) {
+        val subSections = remember {
+            listOf(
+                PrintableSubSection("plan_info", "مشخصات طرح وام و قسط", "عنوان، مرجع، تعداد و کل بازپرداخت"),
+                PrintableSubSection("unpaid", "اقساط پرداخت‌نشده", "اقساط باقی‌مانده در بازه"),
+                PrintableSubSection("paid", "اقساط پرداخت‌شده", "اقساط تسویه‌شده در بازه")
+            )
+        }
+        DodotaPrintDialog(
+            sectionTitle = plan!!.title,
+            userPreferences = userPreferences,
+            supportsDateRange = true,
+            initialPreset = PrintDatePreset.ALL,
+            subSections = subSections,
+            showNotesToggle = false,
+            countProvider = { key, s, e ->
+                fun inRange(ms: Long) = (s == null || ms >= s) && (e == null || ms <= e)
+                when (key) {
+                    "unpaid" -> installments.count { !it.isPaid && inRange(it.dueDateMillis) }
+                    "paid" -> installments.count { it.isPaid && inRange(it.dueDateMillis) }
+                    else -> null
+                }
+            },
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                showPrintDialog = false
+                val doc = DodotaPrintBuilders.buildInstallmentDetailDocument(
+                    payload = payload,
+                    plan = plan!!,
+                    installments = installments,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
+            }
+        )
     }
 }
 

@@ -18,13 +18,20 @@ import ir.mmd.dodota.data.model.CategoryEntity
 import ir.mmd.dodota.data.model.TransactionType
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
+import androidx.compose.ui.platform.LocalContext
 import ir.mmd.dodota.ui.components.CategoryIconView
+import ir.mmd.dodota.ui.components.DodotaPrintDialog
+import ir.mmd.dodota.ui.components.DodotaPrintIconButton
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.EmptyStateCard
 import ir.mmd.dodota.ui.components.GlassCard
+import ir.mmd.dodota.ui.components.PrintDatePreset
+import ir.mmd.dodota.ui.components.PrintableSubSection
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.ui.theme.TransferBlue
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
@@ -46,7 +53,9 @@ fun AccountDetailScreen(
 
     val categoryMap = remember(categories) { categories.associateBy { it.id } }
     var showEditAccountDialog by remember { mutableStateOf(false) }
+    var showPrintDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -56,6 +65,10 @@ fun AccountDetailScreen(
                 onBackClick = onBack,
                 actions = {
                     if (account != null) {
+                        DodotaPrintIconButton(
+                            onClick = { showPrintDialog = true },
+                            testTag = "account_detail_print_button"
+                        )
                         IconButton(onClick = { showEditAccountDialog = true }) {
                             Icon(
                                 Icons.Outlined.Edit,
@@ -222,6 +235,45 @@ fun AccountDetailScreen(
                     )
                     showEditAccountDialog = false
                 }
+            }
+        )
+    }
+
+    if (showPrintDialog && account != null) {
+        val subSections = remember {
+            listOf(
+                PrintableSubSection("account_info", "مشخصات حساب و کارت", "شماره کارت، شبا و موجودی فعلی"),
+                PrintableSubSection("income", "واریزها و درآمدها", "تراکنش‌های ورودی به این حساب"),
+                PrintableSubSection("expense", "برداشت‌ها و هزینه‌ها", "تراکنش‌های خروجی از این حساب"),
+                PrintableSubSection("transfer", "انتقال‌ها", "انتقال‌های ورودی و خروجی حساب")
+            )
+        }
+        DodotaPrintDialog(
+            sectionTitle = account!!.name,
+            userPreferences = userPreferences,
+            supportsDateRange = true,
+            initialPreset = PrintDatePreset.ALL,
+            subSections = subSections,
+            countProvider = { key, s, e ->
+                fun inRange(ms: Long) = (s == null || ms >= s) && (e == null || ms <= e)
+                when (key) {
+                    "income" -> transactions.count { it.type == TransactionType.INCOME && inRange(it.dateMillis) }
+                    "expense" -> transactions.count { it.type == TransactionType.EXPENSE && inRange(it.dateMillis) }
+                    "transfer" -> transactions.count { it.type == TransactionType.TRANSFER && inRange(it.dateMillis) }
+                    else -> null
+                }
+            },
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                val doc = DodotaPrintBuilders.buildAccountDetailDocument(
+                    payload = payload,
+                    account = account!!,
+                    transactions = transactions,
+                    allAccounts = listOf(account!!),
+                    categories = categories,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
             }
         )
     }

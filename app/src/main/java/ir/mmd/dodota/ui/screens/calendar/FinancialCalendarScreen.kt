@@ -37,10 +37,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ir.mmd.dodota.data.model.*
+import androidx.compose.ui.platform.LocalContext
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.ui.components.*
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 
@@ -77,6 +80,8 @@ fun FinancialCalendarScreen(
     var selectedYear by remember { mutableIntStateOf(currentPDate.year) }
     var selectedMonth by remember { mutableIntStateOf(currentPDate.month) }
     var selectedDay by remember { mutableIntStateOf(currentPDate.day) }
+    var showPrintDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     val yearsList = remember(currentPDate.year) {
         (currentPDate.year - 20..currentPDate.year + 20).toList()
@@ -213,7 +218,13 @@ fun FinancialCalendarScreen(
             // Item 16 & 19: Clean title "تقویم مالی" without "(چک، قسط...)" and without "امروز" in topBar
             DodotaTopBar(
                 title = "تقویم مالی",
-                onBackClick = onBack
+                onBackClick = onBack,
+                actions = {
+                    DodotaPrintIconButton(
+                        onClick = { showPrintDialog = true },
+                        testTag = "calendar_print_button"
+                    )
+                }
             )
         }
     ) { paddingValues ->
@@ -897,6 +908,54 @@ fun FinancialCalendarScreen(
                 }
             }
         }
+    }
+
+    if (showPrintDialog) {
+        val monthStart = remember(selectedYear, selectedMonth) {
+            PersianDateHelper.getStartOfMonthMillis(selectedYear, selectedMonth)
+        }
+        val monthEnd = remember(selectedYear, selectedMonth) {
+            PersianDateHelper.getEndOfMonthMillis(selectedYear, selectedMonth)
+        }
+        val subSections = remember {
+            listOf(
+                PrintableSubSection("transactions", "تراکنش‌های بازه", "درآمد، هزینه و انتقال‌های ثبت‌شده"),
+                PrintableSubSection("installments", "سررسید اقساط", "اقساط وام‌ها در بازه انتخابی"),
+                PrintableSubSection("checks_debts", "سررسید چک‌ها و بدهی/طلب", "تعهدات مالی بازه")
+            )
+        }
+        DodotaPrintDialog(
+            sectionTitle = "تقویم مالی",
+            userPreferences = userPreferences,
+            supportsDateRange = true,
+            initialPreset = PrintDatePreset.CUSTOM,
+            initialCustomStartMillis = monthStart,
+            initialCustomEndMillis = monthEnd,
+            subSections = subSections,
+            countProvider = { key, s, e ->
+                fun inRange(ms: Long) = (s == null || ms >= s) && (e == null || ms <= e)
+                when (key) {
+                    "transactions" -> transactions.count { inRange(it.dateMillis) }
+                    "installments" -> allInstallments.count { inRange(it.dueDateMillis) }
+                    "checks_debts" -> debts.count { inRange(it.dueDateMillis ?: it.startDateMillis) }
+                    else -> null
+                }
+            },
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                val doc = DodotaPrintBuilders.buildCalendarDocument(
+                    payload = payload,
+                    transactions = transactions,
+                    accounts = emptyList(),
+                    categories = categories,
+                    debts = debts,
+                    installmentPlans = installmentPlans,
+                    allInstallments = allInstallments,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
+            }
+        )
     }
 }
 

@@ -27,6 +27,8 @@ import ir.mmd.dodota.ui.components.*
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.ui.theme.WarningAmber
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
@@ -53,6 +55,7 @@ fun BudgetsScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var budgetToEdit by remember { mutableStateOf<BudgetEntity?>(null) }
     var budgetToDelete by remember { mutableStateOf<BudgetEntity?>(null) }
+    var showPrintDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -61,7 +64,13 @@ fun BudgetsScreen(
         topBar = {
             DodotaTopBar(
                 title = "بودجه‌بندی ماهانه (${PersianDateHelper.PERSIAN_MONTHS[currentPDate.month - 1]})",
-                onBackClick = onBack
+                onBackClick = onBack,
+                actions = {
+                    DodotaPrintIconButton(
+                        onClick = { showPrintDialog = true },
+                        testTag = "budgets_print_button"
+                    )
+                }
             )
         },
         floatingActionButton = {
@@ -302,6 +311,41 @@ fun BudgetsScreen(
                 TextButton(onClick = { budgetToDelete = null }) {
                     Text("انصراف")
                 }
+            }
+        )
+    }
+
+    if (showPrintDialog) {
+        val monthTitle = PersianDateHelper.PERSIAN_MONTHS[currentPDate.month - 1]
+        val budgetCatIds = remember(budgets) { budgets.map { it.categoryId }.toSet() }
+        DodotaPrintDialog(
+            sectionTitle = "بودجه‌بندی ماهانه ($monthTitle)",
+            userPreferences = userPreferences,
+            supportsDateRange = false,
+            subSections = listOf(
+                PrintableSubSection("budgets_status", "وضعیت بودجه‌های ماهانه"),
+                PrintableSubSection("expenses_detail", "ریز هزینه‌های مرتبط")
+            ),
+            countProvider = { key, _, _ ->
+                when (key) {
+                    "budgets_status" -> budgets.size
+                    "expenses_detail" -> monthlyExpenses.count { it.categoryId in budgetCatIds }
+                    else -> null
+                }
+            },
+            showNotesToggle = false,
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                showPrintDialog = false
+                val doc = DodotaPrintBuilders.buildBudgetsDocument(
+                    payload = payload,
+                    budgets = budgets,
+                    categories = categories,
+                    monthlyExpenses = monthlyExpenses,
+                    monthTitle = monthTitle,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
             }
         )
     }

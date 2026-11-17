@@ -50,6 +50,8 @@ import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.ui.theme.TransferBlue
 import ir.mmd.dodota.ui.theme.WarningAmber
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
 
@@ -65,6 +67,7 @@ fun GoalsScreen(
     var goalToEdit by remember { mutableStateOf<FinancialGoalEntity?>(null) }
     var goalToDelete by remember { mutableStateOf<FinancialGoalEntity?>(null) }
     var selectedGoalForDeposit by remember { mutableStateOf<Pair<FinancialGoalEntity, Boolean>?>(null) }
+    var showPrintDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -81,7 +84,13 @@ fun GoalsScreen(
         topBar = {
             DodotaTopBar(
                 title = "اهداف",
-                onBackClick = onBack
+                onBackClick = onBack,
+                actions = {
+                    DodotaPrintIconButton(
+                        onClick = { showPrintDialog = true },
+                        testTag = "goals_print_button"
+                    )
+                }
             )
         },
         floatingActionButton = {
@@ -496,6 +505,35 @@ fun GoalsScreen(
                     }
                     selectedGoalForDeposit = null
                 }
+            }
+        )
+    }
+
+    if (showPrintDialog) {
+        DodotaPrintDialog(
+            sectionTitle = "اهداف مالی و پس‌انداز",
+            userPreferences = userPreferences,
+            supportsDateRange = false,
+            subSections = listOf(
+                PrintableSubSection("active_goals", "اهداف در حال پس‌انداز"),
+                PrintableSubSection("completed_goals", "اهداف تکمیل‌شده")
+            ),
+            countProvider = { key, _, _ ->
+                when (key) {
+                    "active_goals" -> goals.count { !(it.isCompleted || (it.targetAmount > 0L && it.currentAmount >= it.targetAmount)) }
+                    "completed_goals" -> goals.count { it.isCompleted || (it.targetAmount > 0L && it.currentAmount >= it.targetAmount) }
+                    else -> null
+                }
+            },
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                showPrintDialog = false
+                val doc = DodotaPrintBuilders.buildGoalsDocument(
+                    payload = payload,
+                    goals = goals,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
             }
         )
     }

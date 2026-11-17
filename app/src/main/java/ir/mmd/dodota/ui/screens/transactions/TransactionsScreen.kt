@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -27,13 +28,19 @@ import ir.mmd.dodota.data.model.*
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.ui.components.CategoryIconView
 import ir.mmd.dodota.ui.components.DodotaExpandableSelector
+import ir.mmd.dodota.ui.components.DodotaPrintDialog
+import ir.mmd.dodota.ui.components.DodotaPrintIconButton
 import ir.mmd.dodota.ui.components.DodotaTextField
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.EmptyStateCard
 import ir.mmd.dodota.ui.components.GlassCard
+import ir.mmd.dodota.ui.components.PrintDatePreset
+import ir.mmd.dodota.ui.components.PrintableSubSection
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.ui.theme.TransferBlue
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.NaturalLanguageQueryParser
 import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
@@ -62,6 +69,8 @@ fun TransactionsScreen(
     var selectedCategoryId by remember { mutableStateOf<Long?>(null) }
     var sortOrder by remember { mutableStateOf(TransactionSortOrder.NEWEST) }
     var showSortAndFilterDialog by remember { mutableStateOf(false) }
+    var showPrintDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     val categoryMap = remember(categories) { categories.associateBy { it.id } }
     val accountMap = remember(accounts) { accounts.associateBy { it.id } }
@@ -119,6 +128,10 @@ fun TransactionsScreen(
             DodotaTopBar(
                 title = "تراکنش‌ها",
                 actions = {
+                    DodotaPrintIconButton(
+                        onClick = { showPrintDialog = true },
+                        testTag = "transactions_print_button"
+                    )
                     BadgedBox(
                         badge = {
                             if (hasActiveFilterOrSort) {
@@ -529,6 +542,51 @@ fun TransactionsScreen(
                 ) {
                     Text("حذف فیلترها")
                 }
+            }
+        )
+    }
+
+    if (showPrintDialog) {
+        val txSubSections = remember(hasActiveFilterOrSort, searchQuery) {
+            listOf(
+                PrintableSubSection("income", "درآمدها", "تراکنش‌های واریزی و درآمد"),
+                PrintableSubSection("expense", "هزینه‌ها", "خریدها و پرداخت‌های ثبت‌شده"),
+                PrintableSubSection("transfer", "انتقال‌ها", "جابجایی بین حساب‌ها و کارت به کارت"),
+                PrintableSubSection(
+                    "respect_filters",
+                    "اعمال فیلتر و جستجوی فعلی صفحه",
+                    "در صورت تیک زدن، فقط ردیف‌های فیلترشده چاپ می‌شوند",
+                    defaultSelected = hasActiveFilterOrSort || searchQuery.isNotBlank()
+                )
+            )
+        }
+        DodotaPrintDialog(
+            sectionTitle = "تراکنش‌ها",
+            userPreferences = userPreferences,
+            supportsDateRange = true,
+            initialPreset = PrintDatePreset.THIS_MONTH,
+            subSections = txSubSections,
+            countProvider = { key, s, e ->
+                fun inRange(ms: Long) = (s == null || ms >= s) && (e == null || ms <= e)
+                when (key) {
+                    "income" -> transactions.count { it.type == TransactionType.INCOME && inRange(it.dateMillis) }
+                    "expense" -> transactions.count { it.type == TransactionType.EXPENSE && inRange(it.dateMillis) }
+                    "transfer" -> transactions.count { it.type == TransactionType.TRANSFER && inRange(it.dateMillis) }
+                    "respect_filters" -> filteredTransactions.count { inRange(it.dateMillis) }
+                    else -> null
+                }
+            },
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                val sourceList = if ("respect_filters" in payload.selectedSections) filteredTransactions else transactions
+                val doc = DodotaPrintBuilders.buildTransactionsDocument(
+                    payload = payload,
+                    transactions = sourceList,
+                    accounts = accounts,
+                    categories = categories,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
             }
         )
     }

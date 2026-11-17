@@ -24,6 +24,8 @@ import ir.mmd.dodota.data.model.*
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
 import ir.mmd.dodota.ui.components.*
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
 
@@ -38,6 +40,7 @@ fun AssetsScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var assetToEdit by remember { mutableStateOf<AssetEntity?>(null) }
     var assetToDelete by remember { mutableStateOf<AssetEntity?>(null) }
+    var showPrintDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val totalAssetsValue = assets.sumOf { it.estimatedValue }
@@ -47,7 +50,13 @@ fun AssetsScreen(
         topBar = {
             DodotaTopBar(
                 title = "دارایی‌ها و ارزش خالص",
-                onBackClick = onBack
+                onBackClick = onBack,
+                actions = {
+                    DodotaPrintIconButton(
+                        onClick = { showPrintDialog = true },
+                        testTag = "assets_print_button"
+                    )
+                }
             )
         },
         floatingActionButton = {
@@ -247,6 +256,35 @@ fun AssetsScreen(
                 TextButton(onClick = { assetToDelete = null }) {
                     Text("انصراف")
                 }
+            }
+        )
+    }
+
+    if (showPrintDialog) {
+        DodotaPrintDialog(
+            sectionTitle = "دارایی‌ها و ارزش خالص",
+            userPreferences = userPreferences,
+            supportsDateRange = false,
+            subSections = listOf(
+                PrintableSubSection("net_worth_summary", "خلاصه وضعیت ثروت و دارایی"),
+                PrintableSubSection("assets_list", "فهرست دارایی‌های ثبت‌شده")
+            ),
+            countProvider = { key, _, _ ->
+                when (key) {
+                    "assets_list" -> assets.size
+                    else -> null
+                }
+            },
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                showPrintDialog = false
+                val doc = DodotaPrintBuilders.buildAssetsDocument(
+                    payload = payload,
+                    assets = assets,
+                    netWorth = netWorth,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
             }
         )
     }

@@ -114,6 +114,38 @@ object PersianDateHelper {
         return cal.timeInMillis
     }
 
+    fun getStartOfDayMillis(year: Int, month: Int, day: Int): Long {
+        val safeDay = day.coerceIn(1, getDaysInPersianMonth(year, month))
+        val (gy, gm, gd) = jalaliToGregorian(year, month, safeDay)
+        val cal = Calendar.getInstance(TimeZone.getDefault())
+        cal.set(gy, gm - 1, gd, 0, 0, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
+    }
+
+    fun getEndOfDayMillis(year: Int, month: Int, day: Int): Long {
+        val safeDay = day.coerceIn(1, getDaysInPersianMonth(year, month))
+        val (gy, gm, gd) = jalaliToGregorian(year, month, safeDay)
+        val cal = Calendar.getInstance(TimeZone.getDefault())
+        cal.set(gy, gm - 1, gd, 23, 59, 59)
+        cal.set(Calendar.MILLISECOND, 999)
+        return cal.timeInMillis
+    }
+
+    fun getStartOfDayMillis(millis: Long): Long {
+        val p = gregorianMillisToPersian(millis)
+        return getStartOfDayMillis(p.year, p.month, p.day)
+    }
+
+    fun getEndOfDayMillis(millis: Long): Long {
+        val p = gregorianMillisToPersian(millis)
+        return getEndOfDayMillis(p.year, p.month, p.day)
+    }
+
+    fun getPreviousPersianMonth(year: Int, month: Int): Pair<Int, Int> {
+        return if (month <= 1) (year - 1) to 12 else year to (month - 1)
+    }
+
     fun getDaysInPersianMonth(year: Int, month: Int): Int {
         return when {
             month in 1..6 -> 31

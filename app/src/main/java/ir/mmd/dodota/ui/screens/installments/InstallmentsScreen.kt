@@ -55,6 +55,8 @@ import ir.mmd.dodota.ui.components.*
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.util.AlarmHelper
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
@@ -77,6 +79,7 @@ fun InstallmentsScreen(
     var planToDelete by remember { mutableStateOf<InstallmentPlanEntity?>(null) }
     var selectedTab by remember { mutableIntStateOf(0) } // 0: اقساط جاری, 1: بایگانی
     var currentInstallmentsSubMode by remember { mutableIntStateOf(0) } // 0: پرداخت‌نشده ماه مربوطه, 1: اقساط ماه انتخاب‌شده
+    var showPrintDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -235,7 +238,13 @@ fun InstallmentsScreen(
         topBar = {
             DodotaTopBar(
                 title = "اقساط",
-                onBackClick = onBack
+                onBackClick = onBack,
+                actions = {
+                    DodotaPrintIconButton(
+                        onClick = { showPrintDialog = true },
+                        testTag = "installments_print_button"
+                    )
+                }
             )
         },
         floatingActionButton = {
@@ -2202,6 +2211,45 @@ fun InstallmentsScreen(
                 TextButton(onClick = { planToDelete = null }) {
                     Text("انصراف")
                 }
+            }
+        )
+    }
+
+    if (showPrintDialog) {
+        val subSections = remember(currentInstallmentsSubMode) {
+            listOf(
+                PrintableSubSection("unpaid", "اقساط پرداخت‌نشده", "اقساط سررسیددار در انتظار پرداخت"),
+                PrintableSubSection("paid", "اقساط پرداخت‌شده", "اقساط تسویه‌شده در بازه", defaultSelected = currentInstallmentsSubMode == 1),
+                PrintableSubSection("plans_summary", "خلاصه طرح‌های وام و قسط", "جمع کل، مانده و تعداد اقساط هر طرح")
+            )
+        }
+        DodotaPrintDialog(
+            sectionTitle = "اقساط",
+            userPreferences = userPreferences,
+            supportsDateRange = true,
+            initialPreset = PrintDatePreset.CUSTOM,
+            initialCustomStartMillis = startOfMonthMillis,
+            initialCustomEndMillis = endOfMonthMillis,
+            subSections = subSections,
+            showNotesToggle = false,
+            countProvider = { key, s, e ->
+                fun inRange(ms: Long) = (s == null || ms >= s) && (e == null || ms <= e)
+                when (key) {
+                    "unpaid" -> allInstallments.count { it.planId in plansMap && !it.isPaid && inRange(it.dueDateMillis) }
+                    "paid" -> allInstallments.count { it.planId in plansMap && it.isPaid && inRange(it.dueDateMillis) }
+                    "plans_summary" -> plans.size
+                    else -> null
+                }
+            },
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                val doc = DodotaPrintBuilders.buildInstallmentsDocument(
+                    payload = payload,
+                    plans = plans,
+                    allInstallments = allInstallments,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
             }
         )
     }

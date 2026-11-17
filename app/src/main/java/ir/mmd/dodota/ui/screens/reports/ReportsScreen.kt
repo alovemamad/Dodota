@@ -24,18 +24,25 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ir.mmd.dodota.data.model.*
 import ir.mmd.dodota.data.preferences.UserPreferences
+import ir.mmd.dodota.ui.components.DodotaPrintDialog
+import ir.mmd.dodota.ui.components.DodotaPrintIconButton
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.GlassCard
+import ir.mmd.dodota.ui.components.PrintDatePreset
+import ir.mmd.dodota.ui.components.PrintableSubSection
 import ir.mmd.dodota.ui.components.charts.*
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.ui.theme.TransferBlue
 import ir.mmd.dodota.ui.theme.WarningAmber
+import ir.mmd.dodota.util.DodotaPrintBuilders
+import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 
@@ -57,8 +64,11 @@ fun ReportsScreen(
     transactions: List<TransactionEntity>,
     categories: List<CategoryEntity>,
     userPreferences: UserPreferences,
+    accounts: List<AccountEntity> = emptyList(),
     onBack: (() -> Unit)? = null
 ) {
+    val context = LocalContext.current
+    var showPrintDialog by remember { mutableStateOf(false) }
     var selectedPeriod by remember { mutableStateOf(ReportPeriod.THIS_MONTH) }
     var selectedChartType by remember { mutableStateOf(ChartViewType.PIE) }
     var pieCategoryType by remember { mutableStateOf(TransactionType.EXPENSE) }
@@ -197,7 +207,13 @@ fun ReportsScreen(
         topBar = {
             DodotaTopBar(
                 title = "آمار و نمودارهای هوشمند",
-                onBackClick = onBack
+                onBackClick = onBack,
+                actions = {
+                    DodotaPrintIconButton(
+                        onClick = { showPrintDialog = true },
+                        testTag = "reports_print_button"
+                    )
+                }
             )
         }
     ) { paddingValues ->
@@ -723,5 +739,48 @@ fun ReportsScreen(
                 }
             }
         }
+    }
+
+    if (showPrintDialog) {
+        val initialPreset = when (selectedPeriod) {
+            ReportPeriod.THIS_MONTH -> PrintDatePreset.THIS_MONTH
+            ReportPeriod.LAST_THREE_MONTHS -> PrintDatePreset.LAST_3_MONTHS
+            ReportPeriod.THIS_YEAR -> PrintDatePreset.THIS_YEAR
+            ReportPeriod.ALL -> PrintDatePreset.ALL
+        }
+        val reportSubSections = remember {
+            listOf(
+                PrintableSubSection("kpi", "شاخص‌های کلیدی عملکرد", "درآمد، هزینه، نرخ پس‌انداز و میانگین روزانه"),
+                PrintableSubSection("categories", "تفکیک هزینه‌ها بر اساس دسته‌بندی", "جدول سهم هر دسته‌بندی از کل مخارج"),
+                PrintableSubSection("monthly", "مقایسه روند ۶ ماهه", "تراز درآمد و هزینه در ماه‌های اخیر"),
+                PrintableSubSection("transactions", "جدول ریز تراکنش‌های بازه", "تمامی تراکنش‌های ثبت‌شده در بازه", defaultSelected = false)
+            )
+        }
+        DodotaPrintDialog(
+            sectionTitle = "آمار و نمودارها",
+            userPreferences = userPreferences,
+            supportsDateRange = true,
+            initialPreset = initialPreset,
+            subSections = reportSubSections,
+            countProvider = { key, s, e ->
+                fun inRange(ms: Long) = (s == null || ms >= s) && (e == null || ms <= e)
+                when (key) {
+                    "transactions" -> transactions.count { inRange(it.dateMillis) }
+                    "categories" -> transactions.filter { it.type == TransactionType.EXPENSE && inRange(it.dateMillis) }.map { it.categoryId }.distinct().size
+                    else -> null
+                }
+            },
+            onDismiss = { showPrintDialog = false },
+            onConfirmPrint = { payload ->
+                val doc = DodotaPrintBuilders.buildReportsDocument(
+                    payload = payload,
+                    transactions = transactions,
+                    categories = categories,
+                    accounts = accounts,
+                    userPreferences = userPreferences
+                )
+                DodotaPrintHelper.printDocument(context, doc)
+            }
+        )
     }
 }
