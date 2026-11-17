@@ -9,7 +9,15 @@ import kotlin.math.abs
 object PersianNumberFormatter {
     private val persianDigits = charArrayOf('۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹')
     private val englishDigits = charArrayOf('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
-    private val arabicDigits = charArrayOf('٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩')
+
+    private val decimalFormatThreadLocal = object : ThreadLocal<DecimalFormat>() {
+        override fun initialValue(): DecimalFormat {
+            val symbols = DecimalFormatSymbols(Locale.US).apply {
+                groupingSeparator = ','
+            }
+            return DecimalFormat("#,###", symbols)
+        }
+    }
 
     /**
      * Global digit language state synced from UserPreferences.currency.isEnglishDigits.
@@ -31,12 +39,9 @@ object PersianNumberFormatter {
     ): String {
         val longVal = number.toLong()
         val raw = if (useCommas) {
-            val symbols = DecimalFormatSymbols(Locale.US).apply {
-                groupingSeparator = ','
-            }
-            DecimalFormat("#,###", symbols).format(longVal)
+            decimalFormatThreadLocal.get()!!.format(longVal)
         } else {
-            number.toString()
+            longVal.toString()
         }
         return applyDigitLanguage(raw, isEnglishDigits)
     }
@@ -118,11 +123,9 @@ object PersianNumberFormatter {
     fun toEnglishDigits(text: String): String {
         val sb = StringBuilder(text.length)
         for (ch in text) {
-            val pIdx = persianDigits.indexOf(ch)
-            val aIdx = arabicDigits.indexOf(ch)
-            when {
-                pIdx >= 0 -> sb.append(englishDigits[pIdx])
-                aIdx >= 0 -> sb.append(englishDigits[aIdx])
+            when (ch) {
+                in '۰'..'۹' -> sb.append(englishDigits[ch - '۰'])
+                in '٠'..'٩' -> sb.append(englishDigits[ch - '٠'])
                 else -> sb.append(ch)
             }
         }

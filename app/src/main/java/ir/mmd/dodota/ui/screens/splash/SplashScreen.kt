@@ -19,7 +19,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ir.mmd.dodota.R
 import ir.mmd.dodota.data.preferences.UserPreferences
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun SplashScreen(
@@ -28,20 +30,26 @@ fun SplashScreen(
     onNavigateToLock: () -> Unit,
     onNavigateToMain: () -> Unit
 ) {
-    val scale = remember { Animatable(0.7f) }
+    val scale = remember { Animatable(0.78f) }
     val alpha = remember { Animatable(0f) }
     var animationDone by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        scale.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing)
-        )
-        alpha.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(durationMillis = 500)
-        )
-        delay(600)
+        coroutineScope {
+            launch {
+                scale.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing)
+                )
+            }
+            launch {
+                alpha.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing)
+                )
+            }
+        }
+        delay(160)
         animationDone = true
     }
 

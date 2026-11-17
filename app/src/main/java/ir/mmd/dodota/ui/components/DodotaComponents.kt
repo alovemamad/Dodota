@@ -72,7 +72,24 @@ import ir.mmd.dodota.util.PersianNumberFormatter
 import ir.mmd.dodota.util.ReminderAlarmReceiver
 import kotlinx.coroutines.launch
 import java.util.Calendar
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
+
+private val parsedHexColorCache = ConcurrentHashMap<String, Color>()
+
+fun parseHexColorCached(hex: String, fallback: Color): Color {
+    if (hex.isBlank()) return fallback
+    parsedHexColorCache[hex]?.let { return it }
+    val parsed = try {
+        Color(android.graphics.Color.parseColor(hex))
+    } catch (_: Exception) {
+        return fallback
+    }
+    if (parsedHexColorCache.size < 256) {
+        parsedHexColorCache.putIfAbsent(hex, parsed)
+    }
+    return parsed
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -435,19 +452,18 @@ fun CategoryIconView(
     modifier: Modifier = Modifier,
     size: Dp = 44.dp
 ) {
-    val bg = try {
-        Color(android.graphics.Color.parseColor(colorHex))
-    } catch (_: Exception) {
-        MaterialTheme.colorScheme.primary
+    val primaryFallback = MaterialTheme.colorScheme.primary
+    val bg = remember(colorHex, primaryFallback) {
+        parseHexColorCached(colorHex, primaryFallback)
     }
-
-    val iconVector = getIconVectorByName(iconName)
+    val iconVector = remember(iconName) { getIconVectorByName(iconName) }
+    val iconShape = remember(size) { RoundedCornerShape(size / 2.6f) }
     val isVipRed = LocalAppThemeMode.current == AppThemeMode.VIP_RED
 
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(size / 2.6f))
+            .clip(iconShape)
             .background(
                 Brush.linearGradient(
                     colors = listOf(
@@ -459,7 +475,7 @@ fun CategoryIconView(
             .border(
                 width = 1.dp,
                 color = bg.copy(alpha = if (isVipRed) 0.45f else 0.25f),
-                shape = RoundedCornerShape(size / 2.6f)
+                shape = iconShape
             ),
         contentAlignment = Alignment.Center
     ) {

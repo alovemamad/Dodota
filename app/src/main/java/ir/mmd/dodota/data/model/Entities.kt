@@ -36,7 +36,14 @@ data class CategoryEntity(
     val parentCategoryId: Long? = null
 )
 
-@Entity(tableName = "transactions")
+@Entity(
+    tableName = "transactions",
+    indices = [
+        Index(value = ["isDeleted", "dateMillis"]),
+        Index(value = ["accountId"]),
+        Index(value = ["categoryId"])
+    ]
+)
 data class TransactionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val type: TransactionType,
@@ -78,7 +85,10 @@ data class DebtEntity(
     val isDeleted: Boolean = false
 )
 
-@Entity(tableName = "debt_payments")
+@Entity(
+    tableName = "debt_payments",
+    indices = [Index(value = ["debtId"])]
+)
 data class DebtPaymentEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val debtId: Long,
@@ -106,7 +116,13 @@ data class InstallmentPlanEntity(
     val isCompleted: Boolean = false
 )
 
-@Entity(tableName = "installments")
+@Entity(
+    tableName = "installments",
+    indices = [
+        Index(value = ["planId"]),
+        Index(value = ["isPaid", "dueDateMillis"])
+    ]
+)
 data class InstallmentEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val planId: Long,
@@ -134,7 +150,10 @@ data class RecurringTransactionEntity(
     val note: String = ""
 )
 
-@Entity(tableName = "reminders")
+@Entity(
+    tableName = "reminders",
+    indices = [Index(value = ["isEnabled", "isCompleted", "dueDateTimeMillis"])]
+)
 data class ReminderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
@@ -147,7 +166,10 @@ data class ReminderEntity(
     val isEnabled: Boolean = true
 )
 
-@Entity(tableName = "budgets")
+@Entity(
+    tableName = "budgets",
+    indices = [Index(value = ["monthKey"])]
+)
 data class BudgetEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val categoryId: Long,

@@ -10,6 +10,7 @@ import ir.mmd.dodota.data.model.AppThemeMode
 import ir.mmd.dodota.util.SecurityHelper
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 
@@ -109,6 +110,7 @@ class UserPreferencesRepository(private val context: Context) {
                 latestKnownVersion = preferences[PreferencesKeys.LATEST_KNOWN_VERSION] ?: ""
             )
         }
+        .distinctUntilChanged()
 
     suspend fun setChichiPlusEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->

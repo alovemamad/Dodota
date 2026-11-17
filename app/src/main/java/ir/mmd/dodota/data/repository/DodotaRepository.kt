@@ -4,11 +4,20 @@ import androidx.room.withTransaction
 import ir.mmd.dodota.data.local.DodotaDatabase
 import ir.mmd.dodota.data.model.*
 import ir.mmd.dodota.util.PersianDateHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 
 class DodotaRepository(private val db: DodotaDatabase) {
+
+    private companion object {
+        val timeFormatThreadLocal = object : ThreadLocal<java.text.SimpleDateFormat>() {
+            override fun initialValue(): java.text.SimpleDateFormat =
+                java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+        }
+    }
 
     private val accountDao = db.accountDao()
     private val transactionDao = db.transactionDao()
@@ -25,8 +34,8 @@ class DodotaRepository(private val db: DodotaDatabase) {
     // ----------------------------------------------------
     // ACCOUNTS
     // ----------------------------------------------------
-    val allActiveAccounts: Flow<List<AccountEntity>> = accountDao.getAllActiveAccounts()
-    val allAccounts: Flow<List<AccountEntity>> = accountDao.getAllAccounts()
+    val allActiveAccounts: Flow<List<AccountEntity>> = accountDao.getAllActiveAccounts().distinctUntilChanged()
+    val allAccounts: Flow<List<AccountEntity>> = accountDao.getAllAccounts().distinctUntilChanged()
 
     fun getAccountFlow(id: Long): Flow<AccountEntity?> = accountDao.getAccountByIdFlow(id)
 
@@ -49,9 +58,9 @@ class DodotaRepository(private val db: DodotaDatabase) {
     // ----------------------------------------------------
     // TRANSACTIONS & BALANCE CONSISTENCY
     // ----------------------------------------------------
-    val allTransactions: Flow<List<TransactionEntity>> = transactionDao.getAllTransactions()
-    val trashTransactions: Flow<List<TransactionEntity>> = transactionDao.getTrashTransactions()
-    val recentTransactions: Flow<List<TransactionEntity>> = transactionDao.getRecentTransactions(10)
+    val allTransactions: Flow<List<TransactionEntity>> = transactionDao.getAllTransactions().distinctUntilChanged()
+    val trashTransactions: Flow<List<TransactionEntity>> = transactionDao.getTrashTransactions().distinctUntilChanged()
+    val recentTransactions: Flow<List<TransactionEntity>> = transactionDao.getRecentTransactions(10).distinctUntilChanged()
 
     suspend fun getTransaction(id: Long): TransactionEntity? = transactionDao.getTransactionById(id)
 
@@ -156,7 +165,7 @@ class DodotaRepository(private val db: DodotaDatabase) {
     // ----------------------------------------------------
     // CATEGORIES
     // ----------------------------------------------------
-    val allCategories: Flow<List<CategoryEntity>> = categoryDao.getAllCategories()
+    val allCategories: Flow<List<CategoryEntity>> = categoryDao.getAllCategories().distinctUntilChanged()
 
     fun getCategoriesByType(type: TransactionType): Flow<List<CategoryEntity>> =
         categoryDao.getCategoriesByType(type)
@@ -170,7 +179,7 @@ class DodotaRepository(private val db: DodotaDatabase) {
     // ----------------------------------------------------
     // DEBTS & RECEIVABLES
     // ----------------------------------------------------
-    val allDebts: Flow<List<DebtEntity>> = debtDao.getAllDebts()
+    val allDebts: Flow<List<DebtEntity>> = debtDao.getAllDebts().distinctUntilChanged()
 
     fun getDebtsByType(type: DebtType): Flow<List<DebtEntity>> = debtDao.getDebtsByType(type)
 
@@ -245,9 +254,9 @@ class DodotaRepository(private val db: DodotaDatabase) {
     // ----------------------------------------------------
     // INSTALLMENTS
     // ----------------------------------------------------
-    val allInstallmentPlans: Flow<List<InstallmentPlanEntity>> = installmentDao.getAllPlans()
-    val allInstallments: Flow<List<InstallmentEntity>> = installmentDao.getAllInstallments()
-    val upcomingInstallments: Flow<List<InstallmentEntity>> = installmentDao.getUpcomingInstallments()
+    val allInstallmentPlans: Flow<List<InstallmentPlanEntity>> = installmentDao.getAllPlans().distinctUntilChanged()
+    val allInstallments: Flow<List<InstallmentEntity>> = installmentDao.getAllInstallments().distinctUntilChanged()
+    val upcomingInstallments: Flow<List<InstallmentEntity>> = installmentDao.getUpcomingInstallments().distinctUntilChanged()
 
     fun getInstallmentPlanFlow(id: Long): Flow<InstallmentPlanEntity?> = installmentDao.getPlanByIdFlow(id)
 
@@ -456,9 +465,9 @@ class DodotaRepository(private val db: DodotaDatabase) {
     // ----------------------------------------------------
     // RECURRING TRANSACTIONS
     // ----------------------------------------------------
-    val allRecurring: Flow<List<RecurringTransactionEntity>> = recurringDao.getAllRecurring()
+    val allRecurring: Flow<List<RecurringTransactionEntity>> = recurringDao.getAllRecurring().distinctUntilChanged()
     val allRecurringTransactions: Flow<List<RecurringTransactionEntity>> get() = allRecurring
-    val activeRecurring: Flow<List<RecurringTransactionEntity>> = recurringDao.getActiveRecurring()
+    val activeRecurring: Flow<List<RecurringTransactionEntity>> = recurringDao.getActiveRecurring().distinctUntilChanged()
 
     suspend fun insertRecurring(item: RecurringTransactionEntity): Long = recurringDao.insertRecurring(item)
     suspend fun updateRecurring(item: RecurringTransactionEntity) = recurringDao.updateRecurring(item)
@@ -472,8 +481,8 @@ class DodotaRepository(private val db: DodotaDatabase) {
     // ----------------------------------------------------
     // REMINDERS
     // ----------------------------------------------------
-    val allReminders: Flow<List<ReminderEntity>> = reminderDao.getAllReminders()
-    val activeReminders: Flow<List<ReminderEntity>> = reminderDao.getActiveReminders()
+    val allReminders: Flow<List<ReminderEntity>> = reminderDao.getAllReminders().distinctUntilChanged()
+    val activeReminders: Flow<List<ReminderEntity>> = reminderDao.getActiveReminders().distinctUntilChanged()
 
     suspend fun insertReminder(reminder: ReminderEntity): Long = reminderDao.insertReminder(reminder)
     suspend fun updateReminder(reminder: ReminderEntity) = reminderDao.updateReminder(reminder)
@@ -517,7 +526,7 @@ class DodotaRepository(private val db: DodotaDatabase) {
     // ----------------------------------------------------
     // BUDGETS
     // ----------------------------------------------------
-    val allBudgets: Flow<List<BudgetEntity>> = budgetDao.getAllBudgets()
+    val allBudgets: Flow<List<BudgetEntity>> = budgetDao.getAllBudgets().distinctUntilChanged()
 
     fun getBudgetsForMonth(monthKey: String): Flow<List<BudgetEntity>> =
         budgetDao.getBudgetsForMonth(monthKey)
@@ -534,7 +543,7 @@ class DodotaRepository(private val db: DodotaDatabase) {
     // ----------------------------------------------------
     // FINANCIAL GOALS
     // ----------------------------------------------------
-    val allGoals: Flow<List<FinancialGoalEntity>> = goalDao.getAllGoals()
+    val allGoals: Flow<List<FinancialGoalEntity>> = goalDao.getAllGoals().distinctUntilChanged()
 
     suspend fun insertGoal(goal: FinancialGoalEntity): Long = goalDao.insertGoal(goal)
     suspend fun updateGoal(goal: FinancialGoalEntity) = goalDao.updateGoal(goal)
@@ -587,7 +596,7 @@ class DodotaRepository(private val db: DodotaDatabase) {
     // ----------------------------------------------------
     // ASSETS & NET WORTH
     // ----------------------------------------------------
-    val allAssets: Flow<List<AssetEntity>> = assetDao.getAllAssets()
+    val allAssets: Flow<List<AssetEntity>> = assetDao.getAllAssets().distinctUntilChanged()
 
     suspend fun insertAsset(asset: AssetEntity): Long = assetDao.insertAsset(asset)
     suspend fun updateAsset(asset: AssetEntity) = assetDao.updateAsset(asset)
@@ -605,6 +614,8 @@ class DodotaRepository(private val db: DodotaDatabase) {
             .sumOf { it.totalAmount - it.paidAmount }
         (accountsTotal + assetsTotal) - debtsTotal
     }
+        .distinctUntilChanged()
+        .flowOn(Dispatchers.Default)
     val netWorth: Flow<Long> get() = netWorthFlow
 
     // ----------------------------------------------------
@@ -612,8 +623,8 @@ class DodotaRepository(private val db: DodotaDatabase) {
     // ----------------------------------------------------
     private val checklistDao = db.checklistDao()
 
-    val allActiveChecklists: Flow<List<ChecklistEntity>> = checklistDao.getAllActiveChecklists()
-    val allChecklistItems: Flow<List<ChecklistItemEntity>> = checklistDao.getAllChecklistItems()
+    val allActiveChecklists: Flow<List<ChecklistEntity>> = checklistDao.getAllActiveChecklists().distinctUntilChanged()
+    val allChecklistItems: Flow<List<ChecklistItemEntity>> = checklistDao.getAllChecklistItems().distinctUntilChanged()
 
     fun getItemsForChecklist(checklistId: Long): Flow<List<ChecklistItemEntity>> =
         checklistDao.getItemsForChecklist(checklistId)
@@ -636,7 +647,7 @@ class DodotaRepository(private val db: DodotaDatabase) {
         checklistTitle: String
     ): Long {
         return db.withTransaction {
-            val timeFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+            val now = System.currentTimeMillis()
             val tx = TransactionEntity(
                 type = TransactionType.EXPENSE,
                 amount = item.estimatedAmount,
@@ -644,8 +655,8 @@ class DodotaRepository(private val db: DodotaDatabase) {
                 categoryId = categoryId,
                 title = item.text,
                 note = "از چک‌لیست: $checklistTitle",
-                dateMillis = System.currentTimeMillis(),
-                timeString = timeFormat.format(java.util.Date())
+                dateMillis = now,
+                timeString = timeFormatThreadLocal.get()!!.format(java.util.Date(now))
             )
             val txId = addTransaction(tx)
             checklistDao.updateChecklistItem(
@@ -662,7 +673,7 @@ class DodotaRepository(private val db: DodotaDatabase) {
     // ----------------------------------------------------
     // CHAND ROOZ (CHICHI PLUS)
     // ----------------------------------------------------
-    val allChandRoozRecords: Flow<List<ChandRoozRecordEntity>> = chandRoozDao.getAllRecords()
+    val allChandRoozRecords: Flow<List<ChandRoozRecordEntity>> = chandRoozDao.getAllRecords().distinctUntilChanged()
 
     fun getChandRoozRecordsByCategory(category: ChandRoozCategory): Flow<List<ChandRoozRecordEntity>> =
         chandRoozDao.getRecordsByCategory(category)

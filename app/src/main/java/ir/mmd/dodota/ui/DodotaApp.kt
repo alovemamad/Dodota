@@ -78,13 +78,24 @@ import ir.mmd.dodota.ui.screens.transactions.AddEditTransactionScreen
 import ir.mmd.dodota.ui.screens.transactions.TransactionsScreen
 import ir.mmd.dodota.ui.screens.trash.TrashScreen
 import androidx.compose.ui.platform.testTag
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.ui.theme.LocalDodotaGlassStyle
 import ir.mmd.dodota.util.AlarmHelper
 import ir.mmd.dodota.util.AlarmSoundManager
 import ir.mmd.dodota.util.ReminderAlarmReceiver
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+private val BOTTOM_BAR_ROUTES = setOf(
+    Screen.Home.route,
+    Screen.Transactions.route,
+    Screen.Reports.route,
+    Screen.Debts.route,
+    Screen.Settings.route
+)
 
 @Composable
 fun DodotaApp(
@@ -92,23 +103,23 @@ fun DodotaApp(
     preferencesRepo: UserPreferencesRepository,
     backupRepository: BackupRepository,
     navController: NavHostController = rememberNavController(),
-    userPreferences: UserPreferences = preferencesRepo.userPreferencesFlow.collectAsState(initial = UserPreferences()).value
+    userPreferences: UserPreferences = preferencesRepo.userPreferencesFlow.collectAsStateWithLifecycle(initialValue = UserPreferences()).value
 ) {
     val context = LocalContext.current
-    val accounts by repository.allAccounts.collectAsState(initial = emptyList())
-    val transactions by repository.allTransactions.collectAsState(initial = emptyList())
-    val categories by repository.allCategories.collectAsState(initial = emptyList())
-    val debts by repository.allDebts.collectAsState(initial = emptyList())
-    val installmentPlans by repository.allInstallmentPlans.collectAsState(initial = emptyList())
-    val allInstallments by repository.allInstallments.collectAsState(initial = emptyList())
-    val upcomingInstallments by repository.upcomingInstallments.collectAsState(initial = emptyList())
-    val activeReminders by repository.activeReminders.collectAsState(initial = emptyList())
-    val goals by repository.allGoals.collectAsState(initial = emptyList())
-    val assets by repository.allAssets.collectAsState(initial = emptyList())
-    val netWorth by repository.netWorth.collectAsState(initial = 0L)
-    val allBudgets by repository.allBudgets.collectAsState(initial = emptyList())
-    val chandRoozRecords by repository.allChandRoozRecords.collectAsState(initial = emptyList())
-    val activeAlarm by AlarmSoundManager.activeAlarmState.collectAsState()
+    val accounts by repository.allAccounts.collectAsStateWithLifecycle(initialValue = emptyList())
+    val transactions by repository.allTransactions.collectAsStateWithLifecycle(initialValue = emptyList())
+    val categories by repository.allCategories.collectAsStateWithLifecycle(initialValue = emptyList())
+    val debts by repository.allDebts.collectAsStateWithLifecycle(initialValue = emptyList())
+    val installmentPlans by repository.allInstallmentPlans.collectAsStateWithLifecycle(initialValue = emptyList())
+    val allInstallments by repository.allInstallments.collectAsStateWithLifecycle(initialValue = emptyList())
+    val upcomingInstallments by repository.upcomingInstallments.collectAsStateWithLifecycle(initialValue = emptyList())
+    val activeReminders by repository.activeReminders.collectAsStateWithLifecycle(initialValue = emptyList())
+    val goals by repository.allGoals.collectAsStateWithLifecycle(initialValue = emptyList())
+    val assets by repository.allAssets.collectAsStateWithLifecycle(initialValue = emptyList())
+    val netWorth by repository.netWorth.collectAsStateWithLifecycle(initialValue = 0L)
+    val allBudgets by repository.allBudgets.collectAsStateWithLifecycle(initialValue = emptyList())
+    val chandRoozRecords by repository.allChandRoozRecords.collectAsStateWithLifecycle(initialValue = emptyList())
+    val activeAlarm by AlarmSoundManager.activeAlarmState.collectAsStateWithLifecycle()
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -152,18 +163,25 @@ fun DodotaApp(
     // 2. SCHEDULE ALL ACTIVE REMINDERS WITH ALARM MANAGER
     // Ensures all scheduled reminders ring & notify reliably on time
     // ---------------------------------------------------------
-    LaunchedEffect(activeReminders) {
-        val nowInit = System.currentTimeMillis()
-        activeReminders.forEach { rem ->
-            if (rem.isEnabled && !rem.isCompleted && rem.dueDateTimeMillis > nowInit) {
-                AlarmHelper.scheduleExactAlarm(
-                    context = context,
-                    reminderId = rem.id,
-                    title = rem.title,
-                    description = rem.description.ifEmpty { "موعد ${rem.targetType.title} فرا رسیده است." },
-                    triggerAtMillis = rem.dueDateTimeMillis,
-                    isFromBoot = true
-                )
+    val reminderScheduleSignature = remember(activeReminders) {
+        activeReminders.map { "${it.id}:${it.dueDateTimeMillis}:${it.isEnabled}:${it.isCompleted}:${it.title}" }
+    }
+    LaunchedEffect(reminderScheduleSignature) {
+        if (activeReminders.isEmpty()) return@LaunchedEffect
+        val snapshot = activeReminders.toList()
+        withContext(Dispatchers.IO) {
+            val nowInit = System.currentTimeMillis()
+            snapshot.forEach { rem ->
+                if (rem.isEnabled && !rem.isCompleted && rem.dueDateTimeMillis > nowInit) {
+                    AlarmHelper.scheduleExactAlarm(
+                        context = context,
+                        reminderId = rem.id,
+                        title = rem.title,
+                        description = rem.description.ifEmpty { "موعد ${rem.targetType.title} فرا رسیده است." },
+                        triggerAtMillis = rem.dueDateTimeMillis,
+                        isFromBoot = true
+                    )
+                }
             }
         }
     }
@@ -404,13 +422,7 @@ fun DodotaApp(
         )
     }
 
-    val showBottomBar = currentRoute in listOf(
-        Screen.Home.route,
-        Screen.Transactions.route,
-        Screen.Reports.route,
-        Screen.Debts.route,
-        Screen.Settings.route
-    )
+    val showBottomBar = currentRoute in BOTTOM_BAR_ROUTES
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -446,7 +458,7 @@ fun DodotaApp(
                         tonalElevation = 0.dp,
                         windowInsets = WindowInsets(0, 0, 0, 0)
                     ) {
-                        BottomNavItem.values().forEach { item ->
+                        BottomNavItem.entries.forEach { item ->
                             val isSelected = currentRoute == item.route
                             val iconScale by animateFloatAsState(
                                 targetValue = if (isSelected) 1.18f else 1.0f,

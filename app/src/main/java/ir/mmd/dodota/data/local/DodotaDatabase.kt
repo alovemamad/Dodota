@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
         ChecklistItemEntity::class,
         ChandRoozRecordEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class DodotaDatabase : RoomDatabase() {
@@ -176,6 +176,19 @@ abstract class DodotaDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_10_11 = object : androidx.room.migration.Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_isDeleted_dateMillis` ON `transactions` (`isDeleted`, `dateMillis`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_accountId` ON `transactions` (`accountId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_categoryId` ON `transactions` (`categoryId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_debt_payments_debtId` ON `debt_payments` (`debtId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_installments_planId` ON `installments` (`planId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_installments_isPaid_dueDateMillis` ON `installments` (`isPaid`, `dueDateMillis`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_reminders_isEnabled_isCompleted_dueDateTimeMillis` ON `reminders` (`isEnabled`, `isCompleted`, `dueDateTimeMillis`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_budgets_monthKey` ON `budgets` (`monthKey`)")
+            }
+        }
+
         fun getDatabase(context: Context): DodotaDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -183,7 +196,17 @@ abstract class DodotaDatabase : RoomDatabase() {
                     DodotaDatabase::class.java,
                     "dodota_finance.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                    .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
+                    .addMigrations(
+                        MIGRATION_1_2,
+                        MIGRATION_4_5,
+                        MIGRATION_5_6,
+                        MIGRATION_6_7,
+                        MIGRATION_7_8,
+                        MIGRATION_8_9,
+                        MIGRATION_9_10,
+                        MIGRATION_10_11
+                    )
                     .fallbackToDestructiveMigration(true)
                     .fallbackToDestructiveMigrationOnDowngrade(true)
                     .addCallback(DatabaseCallback(context))

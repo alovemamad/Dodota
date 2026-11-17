@@ -9,11 +9,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.mmd.dodota.data.local.DodotaDatabase
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.preferences.UserPreferencesRepository
@@ -50,7 +50,7 @@ class MainActivity : FragmentActivity() {
         java.util.Locale.setDefault(faLocale)
 
         setContent {
-            val userPreferences by preferencesRepo.userPreferencesFlow.collectAsState(initial = UserPreferences())
+            val userPreferences by preferencesRepo.userPreferencesFlow.collectAsStateWithLifecycle(initialValue = UserPreferences())
             PersianNumberFormatter.globalUseEnglishDigits = userPreferences.currency.isEnglishDigits
 
             androidx.compose.runtime.CompositionLocalProvider(

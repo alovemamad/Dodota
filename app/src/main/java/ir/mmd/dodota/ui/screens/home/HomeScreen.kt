@@ -38,6 +38,7 @@ import ir.mmd.dodota.ui.components.DodotaPrintIconButton
 import ir.mmd.dodota.ui.components.GlassCard
 import ir.mmd.dodota.ui.components.PrintDatePreset
 import ir.mmd.dodota.ui.components.PrintableSubSection
+import ir.mmd.dodota.ui.components.parseHexColorCached
 import ir.mmd.dodota.ui.theme.*
 import ir.mmd.dodota.util.DodotaPrintBuilders
 import ir.mmd.dodota.util.DodotaPrintHelper
@@ -79,19 +80,35 @@ fun HomeScreen(
     var showPrintDialog by remember { mutableStateOf(false) }
     val isBalanceVisible = !userPreferences.isBalanceHidden
     val activeAccounts = remember(accounts) { accounts.filter { it.isActive } }
-    val totalBalance = activeAccounts.sumOf { it.balance }
+    val totalBalance = remember(activeAccounts) { activeAccounts.sumOf { it.balance } }
     val glassStyle = LocalDodotaGlassStyle.current
 
-    // Calculate current Persian month income & expense from allTransactions
-    val currentPersianDate = PersianDateHelper.getCurrentPersianDate()
-    val startOfMonthMillis = PersianDateHelper.getStartOfMonthMillis(currentPersianDate.year, currentPersianDate.month)
-    val endOfMonthMillis = PersianDateHelper.getEndOfMonthMillis(currentPersianDate.year, currentPersianDate.month)
-
-    val currentMonthTransactions = remember(allTransactions, startOfMonthMillis, endOfMonthMillis) {
-        allTransactions.filter { it.dateMillis in startOfMonthMillis..endOfMonthMillis }
+    // Calculate current Persian month income & expense in a single pass
+    val currentPersianDate = remember { PersianDateHelper.getCurrentPersianDate() }
+    val startOfMonthMillis = remember(currentPersianDate.year, currentPersianDate.month) {
+        PersianDateHelper.getStartOfMonthMillis(currentPersianDate.year, currentPersianDate.month)
     }
-    val currentMonthIncome = currentMonthTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
-    val currentMonthExpense = currentMonthTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+    val endOfMonthMillis = remember(currentPersianDate.year, currentPersianDate.month) {
+        PersianDateHelper.getEndOfMonthMillis(currentPersianDate.year, currentPersianDate.month)
+    }
+    val formattedToday = remember(userPreferences.currency.isEnglishDigits) {
+        PersianDateHelper.getFormattedTodayPersian(userPreferences.currency.isEnglishDigits)
+    }
+
+    val (currentMonthIncome, currentMonthExpense) = remember(allTransactions, startOfMonthMillis, endOfMonthMillis) {
+        var inc = 0L
+        var exp = 0L
+        for (tx in allTransactions) {
+            if (tx.dateMillis in startOfMonthMillis..endOfMonthMillis) {
+                when (tx.type) {
+                    TransactionType.INCOME -> inc += tx.amount
+                    TransactionType.EXPENSE -> exp += tx.amount
+                    TransactionType.TRANSFER -> Unit
+                }
+            }
+        }
+        inc to exp
+    }
 
     Box(
         modifier = Modifier
@@ -161,7 +178,7 @@ fun HomeScreen(
                         }
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = PersianDateHelper.getFormattedTodayPersian(),
+                            text = formattedToday,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline
                         )
@@ -539,17 +556,16 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        items(activeAccounts) { account ->
+                        items(activeAccounts, key = { it.id }) { account ->
                             val resolvedBank = remember(account.bankName, account.cardNumber) {
                                 ir.mmd.dodota.ui.screens.accounts.IranianBanksCatalog.resolveBank(
                                     account.bankName,
                                     account.cardNumber
                                 )
                             }
-                            val accColor = resolvedBank?.primaryColor ?: try {
-                                Color(android.graphics.Color.parseColor(account.colorHex))
-                            } catch (_: Exception) {
-                                MaterialTheme.colorScheme.primary
+                            val fallbackPrimary = MaterialTheme.colorScheme.primary
+                            val accColor = resolvedBank?.primaryColor ?: remember(account.colorHex, fallbackPrimary) {
+                                parseHexColorCached(account.colorHex, fallbackPrimary)
                             }
 
                             GlassCard(

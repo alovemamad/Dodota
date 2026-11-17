@@ -5,18 +5,24 @@ import ir.mmd.dodota.util.AlarmHelper
 import ir.mmd.dodota.util.NotificationHelper
 import ir.mmd.dodota.util.ReminderAlarmReceiver
 import ir.mmd.dodota.worker.NightlyBackupWorker
-
-import androidx.work.Configuration
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class DodotaApplication : Application() {
+
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
         NotificationHelper.createNotificationChannels(this)
         ReminderAlarmReceiver.ensureAlarmChannel(this)
         AlarmHelper.rescheduleAllActiveReminders(this)
-        try {
-            NightlyBackupWorker.schedule(this)
-        } catch (_: Throwable) {}
+        appScope.launch {
+            try {
+                NightlyBackupWorker.schedule(this@DodotaApplication)
+            } catch (_: Throwable) {}
+        }
     }
 }

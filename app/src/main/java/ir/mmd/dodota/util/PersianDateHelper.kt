@@ -19,6 +19,19 @@ object PersianDateHelper {
         "شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنج‌شنبه", "جمعه"
     )
 
+    private val calendarThreadLocal = object : ThreadLocal<Calendar>() {
+        override fun initialValue(): Calendar = Calendar.getInstance()
+    }
+
+    private fun localCalendar(): Calendar {
+        val cal = calendarThreadLocal.get()!!
+        val tz = TimeZone.getDefault()
+        if (cal.timeZone != tz) {
+            cal.timeZone = tz
+        }
+        return cal
+    }
+
     fun getCurrentPersianDate(): PersianDate {
         return gregorianMillisToPersian(System.currentTimeMillis())
     }
@@ -71,12 +84,20 @@ object PersianDateHelper {
 
     fun formatToPersianDateNumeric(millis: Long, isEnglishDigits: Boolean = PersianNumberFormatter.globalUseEnglishDigits): String {
         val pDate = gregorianMillisToPersian(millis)
-        val raw = String.format("%04d/%02d/%02d", pDate.year, pDate.month, pDate.day)
+        val raw = buildString(10) {
+            val yStr = pDate.year.toString()
+            repeat((4 - yStr.length).coerceAtLeast(0)) { append('0') }
+            append(yStr).append('/')
+            if (pDate.month < 10) append('0')
+            append(pDate.month).append('/')
+            if (pDate.day < 10) append('0')
+            append(pDate.day)
+        }
         return PersianNumberFormatter.formatDigits(raw, isEnglishDigits)
     }
 
     fun gregorianMillisToPersian(millis: Long): PersianDate {
-        val cal = Calendar.getInstance(TimeZone.getDefault())
+        val cal = localCalendar()
         cal.timeInMillis = millis
         val gy = cal.get(Calendar.YEAR)
         val gm = cal.get(Calendar.MONTH) + 1
@@ -86,20 +107,15 @@ object PersianDateHelper {
 
     fun persianToGregorianMillis(persianDate: PersianDate, hour: Int = 12, minute: Int = 0): Long {
         val (gy, gm, gd) = jalaliToGregorian(persianDate.year, persianDate.month, persianDate.day)
-        val cal = Calendar.getInstance(TimeZone.getDefault())
-        cal.set(Calendar.YEAR, gy)
-        cal.set(Calendar.MONTH, gm - 1)
-        cal.set(Calendar.DAY_OF_MONTH, gd)
-        cal.set(Calendar.HOUR_OF_DAY, hour)
-        cal.set(Calendar.MINUTE, minute)
-        cal.set(Calendar.SECOND, 0)
+        val cal = localCalendar()
+        cal.set(gy, gm - 1, gd, hour, minute, 0)
         cal.set(Calendar.MILLISECOND, 0)
         return cal.timeInMillis
     }
 
     fun getStartOfMonthMillis(year: Int, month: Int): Long {
         val (gy, gm, gd) = jalaliToGregorian(year, month, 1)
-        val cal = Calendar.getInstance(TimeZone.getDefault())
+        val cal = localCalendar()
         cal.set(gy, gm - 1, gd, 0, 0, 0)
         cal.set(Calendar.MILLISECOND, 0)
         return cal.timeInMillis
@@ -108,7 +124,7 @@ object PersianDateHelper {
     fun getEndOfMonthMillis(year: Int, month: Int): Long {
         val daysInMonth = getDaysInPersianMonth(year, month)
         val (gy, gm, gd) = jalaliToGregorian(year, month, daysInMonth)
-        val cal = Calendar.getInstance(TimeZone.getDefault())
+        val cal = localCalendar()
         cal.set(gy, gm - 1, gd, 23, 59, 59)
         cal.set(Calendar.MILLISECOND, 999)
         return cal.timeInMillis
@@ -117,7 +133,7 @@ object PersianDateHelper {
     fun getStartOfDayMillis(year: Int, month: Int, day: Int): Long {
         val safeDay = day.coerceIn(1, getDaysInPersianMonth(year, month))
         val (gy, gm, gd) = jalaliToGregorian(year, month, safeDay)
-        val cal = Calendar.getInstance(TimeZone.getDefault())
+        val cal = localCalendar()
         cal.set(gy, gm - 1, gd, 0, 0, 0)
         cal.set(Calendar.MILLISECOND, 0)
         return cal.timeInMillis
@@ -126,7 +142,7 @@ object PersianDateHelper {
     fun getEndOfDayMillis(year: Int, month: Int, day: Int): Long {
         val safeDay = day.coerceIn(1, getDaysInPersianMonth(year, month))
         val (gy, gm, gd) = jalaliToGregorian(year, month, safeDay)
-        val cal = Calendar.getInstance(TimeZone.getDefault())
+        val cal = localCalendar()
         cal.set(gy, gm - 1, gd, 23, 59, 59)
         cal.set(Calendar.MILLISECOND, 999)
         return cal.timeInMillis
@@ -157,7 +173,10 @@ object PersianDateHelper {
 
     fun isLeapPersianYear(year: Int): Boolean {
         val rem = (year + 12) % 33
-        return rem in listOf(1, 5, 9, 13, 17, 22, 26, 30)
+        return when (rem) {
+            1, 5, 9, 13, 17, 22, 26, 30 -> true
+            else -> false
+        }
     }
 
     private fun gregorianToJalali(gy: Int, gm: Int, gd: Int): PersianDate {

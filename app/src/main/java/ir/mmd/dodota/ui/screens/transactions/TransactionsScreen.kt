@@ -351,9 +351,13 @@ fun TransactionsScreen(
 
                                     val destDisplay = targetAccount?.name
                                         ?: tx.externalDestinationInfo.ifBlank { "مقصد" }
-                                    val subtitle = when (tx.type) {
-                                        TransactionType.TRANSFER -> "${account?.name ?: "مبدأ"} ➔ $destDisplay • ${PersianDateHelper.formatToPersianDate(tx.dateMillis)}"
-                                        else -> "${account?.name ?: "حساب"} • ${PersianDateHelper.formatToPersianDate(tx.dateMillis)}"
+                                    val isEnglishDigits = userPreferences.currency.isEnglishDigits
+                                    val subtitle = remember(tx.type, tx.dateMillis, account?.name, destDisplay, isEnglishDigits) {
+                                        val formattedDate = PersianDateHelper.formatToPersianDate(tx.dateMillis, isEnglishDigits)
+                                        when (tx.type) {
+                                            TransactionType.TRANSFER -> "${account?.name ?: "مبدأ"} ➔ $destDisplay • $formattedDate"
+                                            else -> "${account?.name ?: "حساب"} • $formattedDate"
+                                        }
                                     }
 
                                     Text(
@@ -375,9 +379,12 @@ fun TransactionsScreen(
                                     TransactionType.EXPENSE -> "- "
                                     TransactionType.TRANSFER -> ""
                                 }
+                                val formattedAmountText = remember(tx.amount, prefix, userPreferences.currency) {
+                                    "$prefix${PersianNumberFormatter.formatCurrency(tx.amount, userPreferences.currency)}"
+                                }
 
                                 Text(
-                                    text = "$prefix${PersianNumberFormatter.formatCurrency(tx.amount, userPreferences.currency)}",
+                                    text = formattedAmountText,
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = amountColor
@@ -419,7 +426,7 @@ fun TransactionsScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
 
-                    TransactionSortOrder.values().forEach { order ->
+                    TransactionSortOrder.entries.forEach { order ->
                         val isSelected = sortOrder == order
                         Surface(
                             shape = RoundedCornerShape(12.dp),

@@ -37,6 +37,7 @@ import ir.mmd.dodota.ui.components.GlassCard
 import ir.mmd.dodota.ui.components.PrintDatePreset
 import ir.mmd.dodota.ui.components.PrintableSubSection
 import ir.mmd.dodota.ui.components.charts.*
+import ir.mmd.dodota.ui.components.parseHexColorCached
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.ui.theme.TransferBlue
@@ -72,9 +73,9 @@ fun ReportsScreen(
     var selectedPeriod by remember { mutableStateOf(ReportPeriod.THIS_MONTH) }
     var selectedChartType by remember { mutableStateOf(ChartViewType.PIE) }
     var pieCategoryType by remember { mutableStateOf(TransactionType.EXPENSE) }
-    val currentPDate = PersianDateHelper.getCurrentPersianDate()
+    val currentPDate = remember { PersianDateHelper.getCurrentPersianDate() }
 
-    val filteredTransactions = remember(transactions, selectedPeriod) {
+    val filteredTransactions = remember(transactions, selectedPeriod, currentPDate) {
         when (selectedPeriod) {
             ReportPeriod.THIS_MONTH -> {
                 val start = PersianDateHelper.getStartOfMonthMillis(currentPDate.year, currentPDate.month)
@@ -96,15 +97,29 @@ fun ReportsScreen(
         }
     }
 
-    val totalIncome = filteredTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
-    val totalExpense = filteredTransactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+    val (totalIncome, totalExpense) = remember(filteredTransactions) {
+        var inc = 0L
+        var exp = 0L
+        for (tx in filteredTransactions) {
+            when (tx.type) {
+                TransactionType.INCOME -> inc += tx.amount
+                TransactionType.EXPENSE -> exp += tx.amount
+                TransactionType.TRANSFER -> Unit
+            }
+        }
+        inc to exp
+    }
     val netSavings = totalIncome - totalExpense
-    val savingsRate = if (totalIncome > 0) {
-        ((netSavings.coerceAtLeast(0).toDouble() / totalIncome.toDouble()) * 100).toInt()
-    } else 0
-    val expenseRatio = if (totalIncome > 0) {
-        (totalExpense.toFloat() / totalIncome.toFloat()).coerceIn(0f, 1f)
-    } else if (totalExpense > 0) 1f else 0f
+    val savingsRate = remember(totalIncome, netSavings) {
+        if (totalIncome > 0) {
+            ((netSavings.coerceAtLeast(0).toDouble() / totalIncome.toDouble()) * 100).toInt()
+        } else 0
+    }
+    val expenseRatio = remember(totalIncome, totalExpense) {
+        if (totalIncome > 0) {
+            (totalExpense.toFloat() / totalIncome.toFloat()).coerceIn(0f, 1f)
+        } else if (totalExpense > 0) 1f else 0f
+    }
 
     val categoryMap = remember(categories) { categories.associateBy { it.id } }
 
@@ -116,19 +131,22 @@ fun ReportsScreen(
         expenseTxs.maxByOrNull { it.amount }
     }
     val activeDaysCount = remember(filteredTransactions) {
-        filteredTransactions.map {
-            val d = PersianDateHelper.fromMillis(it.dateMillis)
-            "${d.year}-${d.month}-${d.day}"
-        }.distinct().size.coerceAtLeast(1)
+        val uniqueDays = HashSet<Long>(filteredTransactions.size.coerceAtMost(64))
+        for (tx in filteredTransactions) {
+            val d = PersianDateHelper.fromMillis(tx.dateMillis)
+            uniqueDays.add((d.year.toLong() shl 16) or (d.month.toLong() shl 8) or d.day.toLong())
+        }
+        uniqueDays.size.coerceAtLeast(1)
     }
     val dailyAvgExpense = if (totalExpense > 0) totalExpense / activeDaysCount else 0L
 
     // Slices for Pie Chart
-    val pieSlices = remember(filteredTransactions, categories, pieCategoryType) {
+    val pieSlices = remember(filteredTransactions, categoryMap, pieCategoryType) {
         val defaultHexColors = listOf(
             "#EF4444", "#3B82F6", "#10B981", "#F59E0B", "#8B5CF6",
             "#06B6D4", "#EC4899", "#6366F1", "#EAB308", "#14B8A6"
         )
+        val defaultFallback = Color(0xFFEF4444)
         filteredTransactions
             .filter { it.type == pieCategoryType }
             .groupBy { it.categoryId }
@@ -138,11 +156,7 @@ fun ReportsScreen(
                 val name = cat?.name ?: if (pieCategoryType == TransactionType.EXPENSE) "سایر هزینه‌ها" else "سایر درآمدها"
                 val sum = txs.sumOf { it.amount }
                 val hex = cat?.colorHex ?: defaultHexColors[idx % defaultHexColors.size]
-                val color = try {
-                    Color(android.graphics.Color.parseColor(hex))
-                } catch (_: Exception) {
-                    Color(0xFFEF4444)
-                }
+                val color = parseHexColorCached(hex, defaultFallback)
                 val iconName = cat?.iconName ?: if (pieCategoryType == TransactionType.EXPENSE) "shopping_cart" else "payments"
                 ChartSlice(
                     id = catId,
@@ -157,17 +171,44 @@ fun ReportsScreen(
             .sortedByDescending { it.amount }
     }
 
-    // Groups for Bar Comparison Chart (Last 6 Months)
-    val barGroups = remember(transactions, selectedPeriod) {
+    // Groups for Bar Comparison Chart (Last 6 Months) - Single pass O(N) accumulation
+    val barGroups = remember(transactions, currentPDate.year, currentPDate.month) {
         val monthsList = (1..currentPDate.month).toList().takeLast(6)
-        monthsList.map { m ->
-            val start = PersianDateHelper.getStartOfMonthMillis(currentPDate.year, m)
-            val end = PersianDateHelper.getEndOfMonthMillis(currentPDate.year, m)
-            val monthTxs = transactions.filter { it.dateMillis in start..end }
-            val inc = monthTxs.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
-            val exp = monthTxs.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
-            val label = PersianDateHelper.PERSIAN_MONTHS.getOrNull(m - 1) ?: "ماه $m"
-            BarComparisonGroup(label = label, incomeAmount = inc, expenseAmount = exp)
+        if (monthsList.isEmpty()) {
+            emptyList()
+        } else {
+            val startBounds = LongArray(monthsList.size)
+            val endBounds = LongArray(monthsList.size)
+            val incomeTotals = LongArray(monthsList.size)
+            val expenseTotals = LongArray(monthsList.size)
+            for (i in monthsList.indices) {
+                startBounds[i] = PersianDateHelper.getStartOfMonthMillis(currentPDate.year, monthsList[i])
+                endBounds[i] = PersianDateHelper.getEndOfMonthMillis(currentPDate.year, monthsList[i])
+            }
+            val minBound = startBounds.first()
+            val maxBound = endBounds.last()
+            for (tx in transactions) {
+                val ms = tx.dateMillis
+                if (ms < minBound || ms > maxBound) continue
+                for (i in monthsList.indices) {
+                    if (ms in startBounds[i]..endBounds[i]) {
+                        when (tx.type) {
+                            TransactionType.INCOME -> incomeTotals[i] += tx.amount
+                            TransactionType.EXPENSE -> expenseTotals[i] += tx.amount
+                            TransactionType.TRANSFER -> Unit
+                        }
+                        break
+                    }
+                }
+            }
+            monthsList.mapIndexed { idx, m ->
+                val label = PersianDateHelper.PERSIAN_MONTHS.getOrNull(m - 1) ?: "ماه $m"
+                BarComparisonGroup(
+                    label = label,
+                    incomeAmount = incomeTotals[idx],
+                    expenseAmount = expenseTotals[idx]
+                )
+            }
         }
     }
 
@@ -238,7 +279,7 @@ fun ReportsScreen(
                             .padding(4.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        ReportPeriod.values().forEach { period ->
+                        ReportPeriod.entries.forEach { period ->
                             val isSelected = selectedPeriod == period
                             Surface(
                                 shape = RoundedCornerShape(14.dp),
@@ -579,7 +620,7 @@ fun ReportsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    ChartViewType.values().forEach { chartType ->
+                    ChartViewType.entries.forEach { chartType ->
                         val isSelected = selectedChartType == chartType
                         Surface(
                             shape = RoundedCornerShape(16.dp),
