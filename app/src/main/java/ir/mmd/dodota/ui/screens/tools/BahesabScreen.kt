@@ -1187,8 +1187,9 @@ private fun BahesabNumericField(
             value = PersianNumberFormatter.formatDigits(value, isEnglishDigits),
             onValueChange = { raw ->
                 val clean = PersianNumberFormatter.toEnglishDigits(raw)
-                    .filter { ch -> ch.isDigit() || (isDecimal && (ch == '.' || ch == '٫')) }
+                    .filter { ch -> ch.isDigit() || (isDecimal && (ch == '.' || ch == '٫' || ch == '/')) }
                     .replace('٫', '.')
+                    .replace('/', '.')
                 onValueChange(clean)
             },
             placeholder = {

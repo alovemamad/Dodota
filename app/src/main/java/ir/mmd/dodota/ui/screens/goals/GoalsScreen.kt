@@ -723,6 +723,7 @@ fun AddGoalDialog(
     onDismiss: () -> Unit,
     onSave: (title: String, targetAmount: Long, note: String) -> Unit
 ) {
+    val context = LocalContext.current
     var title by remember { mutableStateOf("") }
     var targetText by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
@@ -735,8 +736,10 @@ fun AddGoalDialog(
         confirmText = "ثبت هدف",
         onConfirm = {
             val target = PersianNumberFormatter.parseAmount(targetText)
-            if (title.isNotBlank() && target > 0L) {
-                onSave(title, target, note)
+            when {
+                title.isBlank() -> Toast.makeText(context, "لطفاً عنوان هدف را وارد کنید", Toast.LENGTH_SHORT).show()
+                target <= 0L -> Toast.makeText(context, "لطفاً مبلغ معتبری وارد کنید", Toast.LENGTH_SHORT).show()
+                else -> onSave(title.trim(), target, note)
             }
         }
     ) {
@@ -773,6 +776,7 @@ fun EditGoalDialog(
     onDismiss: () -> Unit,
     onSave: (newTitle: String, newTarget: Long, newCurrent: Long, newNote: String) -> Unit
 ) {
+    val context = LocalContext.current
     var title by remember { mutableStateOf(goal.title) }
     var targetText by remember { mutableStateOf(goal.targetAmount.toString()) }
     var currentText by remember { mutableStateOf(goal.currentAmount.toString()) }
@@ -786,8 +790,10 @@ fun EditGoalDialog(
         onConfirm = {
             val target = PersianNumberFormatter.parseAmount(targetText)
             val current = PersianNumberFormatter.parseAmount(currentText)
-            if (title.isNotBlank() && target > 0L) {
-                onSave(title, target, current, note)
+            when {
+                title.isBlank() -> Toast.makeText(context, "لطفاً عنوان هدف را وارد کنید", Toast.LENGTH_SHORT).show()
+                target <= 0L -> Toast.makeText(context, "لطفاً مبلغ معتبری وارد کنید", Toast.LENGTH_SHORT).show()
+                else -> onSave(title.trim(), target, current, note)
             }
         }
     ) {
@@ -841,10 +847,11 @@ fun GoalDepositDialog(
     onAction: (isDeposit: Boolean, amount: Long, accountId: Long?) -> Unit
 ) {
     val context = LocalContext.current
+    val activeAccounts = remember(accounts) { accounts.filter { it.isActive }.ifEmpty { accounts } }
     var isDeposit by remember { mutableStateOf(initialIsDeposit) }
     var amountText by remember { mutableStateOf("") }
-    var linkToAccount by remember { mutableStateOf(accounts.isNotEmpty()) }
-    var selectedAccId by remember { mutableStateOf<Long?>(accounts.firstOrNull()?.id) }
+    var linkToAccount by remember(activeAccounts) { mutableStateOf(activeAccounts.isNotEmpty()) }
+    var selectedAccId by remember(activeAccounts) { mutableStateOf<Long?>(activeAccounts.firstOrNull()?.id) }
 
     val typedAmount = PersianNumberFormatter.parseAmount(amountText)
     val remainingToTarget = (goal.targetAmount - goal.currentAmount).coerceAtLeast(0L)
@@ -1139,7 +1146,7 @@ fun GoalDepositDialog(
                 }
 
                 // Account Synchronization Toggle & Selector
-                if (accounts.isNotEmpty()) {
+                if (activeAccounts.isNotEmpty()) {
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
@@ -1180,12 +1187,12 @@ fun GoalDepositDialog(
                             }
 
                             AnimatedVisibility(visible = linkToAccount) {
-                                val selectedAccObj = accounts.firstOrNull { it.id == selectedAccId } ?: accounts.first()
+                                val selectedAccObj = activeAccounts.firstOrNull { it.id == selectedAccId } ?: activeAccounts.first()
                                 Column(modifier = Modifier.padding(top = 10.dp)) {
                                     DodotaDropdownField(
                                         label = if (isDeposit) "انتخاب حساب مبدأ واریز" else "انتخاب حساب مقصد برداشت",
                                         selectedText = "${selectedAccObj.name} (${PersianNumberFormatter.formatCurrency(selectedAccObj.balance, currency)})",
-                                        items = accounts,
+                                        items = activeAccounts,
                                         itemText = { it.name },
                                         itemSubtitle = { "موجودی: ${PersianNumberFormatter.formatCurrency(it.balance, currency)}" },
                                         onItemSelected = { selectedAccId = it.id },

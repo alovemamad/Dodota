@@ -59,8 +59,8 @@ object PersianDateHelper {
         monthsToAdd: Int
     ): Long {
         val totalMonths = (startYear * 12 + (startMonth - 1)) + monthsToAdd
-        val targetYear = totalMonths / 12
-        val targetMonth = (totalMonths % 12) + 1
+        val targetYear = Math.floorDiv(totalMonths, 12)
+        val targetMonth = Math.floorMod(totalMonths, 12) + 1
         val maxDay = getDaysInPersianMonth(targetYear, targetMonth)
         val safeDay = dayOfMonth.coerceIn(1, maxDay)
         return persianToGregorianMillis(PersianDate(targetYear, targetMonth, safeDay))

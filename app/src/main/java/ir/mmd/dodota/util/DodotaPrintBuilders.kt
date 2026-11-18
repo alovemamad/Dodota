@@ -251,16 +251,25 @@ object DodotaPrintBuilders {
         }
 
         if ("monthly" in payload.selectedSections) {
-            val monthsList = (1..currentPDate.month).toList().takeLast(6)
-            val monthRows = monthsList.map { m ->
-                val s = PersianDateHelper.getStartOfMonthMillis(currentPDate.year, m)
-                val e = PersianDateHelper.getEndOfMonthMillis(currentPDate.year, m)
+            val monthPairs = buildList {
+                var y = currentPDate.year
+                var m = currentPDate.month
+                repeat(6) {
+                    add(y to m)
+                    val prev = PersianDateHelper.getPreviousPersianMonth(y, m)
+                    y = prev.first
+                    m = prev.second
+                }
+            }.reversed()
+            val monthRows = monthPairs.map { (y, m) ->
+                val s = PersianDateHelper.getStartOfMonthMillis(y, m)
+                val e = PersianDateHelper.getEndOfMonthMillis(y, m)
                 val monthTxs = transactions.filter { it.dateMillis in s..e }
                 val inc = monthTxs.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
                 val exp = monthTxs.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
                 val net = inc - exp
                 listOf(
-                    PrintCell("${PersianDateHelper.getMonthName(m)} ${fmtNum(currentPDate.year, currency)}", isBold = true),
+                    PrintCell("${PersianDateHelper.getMonthName(m)} ${fmtNum(y, currency)}", isBold = true),
                     PrintCell(fmtMoney(inc, currency), isNumericOrDate = true, tone = PrintTone.POSITIVE),
                     PrintCell(fmtMoney(exp, currency), isNumericOrDate = true, tone = PrintTone.NEGATIVE),
                     PrintCell(
@@ -273,7 +282,7 @@ object DodotaPrintBuilders {
             }
             sections.add(
                 PrintSectionBlock(
-                    title = "روند و مقایسه ۶ ماهه سال جاری",
+                    title = "روند و مقایسه ۶ ماهه اخیر",
                     badge = "${fmtNum(monthRows.size, currency)} ماه",
                     headers = listOf("ماه", "درآمد", "هزینه", "تراز خالص"),
                     rows = monthRows

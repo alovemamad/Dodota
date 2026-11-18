@@ -457,6 +457,7 @@ fun AddReminderDialog(
     onDismiss: () -> Unit,
     onSave: (title: String, desc: String, targetType: ReminderTargetType, triggerDateMillis: Long, offsetDays: Int) -> Unit
 ) {
+    val context = LocalContext.current
     var title by remember { mutableStateOf("") }
     var desc by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(ReminderTargetType.CUSTOM) }
@@ -480,7 +481,9 @@ fun AddReminderDialog(
                     hour = selectedHour,
                     minute = selectedMinute
                 )
-                onSave(title, desc, selectedType, triggerMillis, offsetDays)
+                onSave(title.trim(), desc, selectedType, triggerMillis, offsetDays)
+            } else {
+                Toast.makeText(context, "لطفاً عنوان یادآور را وارد کنید", Toast.LENGTH_SHORT).show()
             }
         }
     ) {
@@ -566,6 +569,7 @@ fun EditReminderDialog(
     onDismiss: () -> Unit,
     onSave: (title: String, desc: String, targetType: ReminderTargetType, triggerDateMillis: Long, offsetDays: Int) -> Unit
 ) {
+    val context = LocalContext.current
     val initialCal = Calendar.getInstance().apply { timeInMillis = reminder.dueDateTimeMillis }
     var title by remember { mutableStateOf(reminder.title) }
     var desc by remember { mutableStateOf(reminder.description) }
@@ -596,7 +600,9 @@ fun EditReminderDialog(
                     hour = selectedHour,
                     minute = selectedMinute
                 )
-                onSave(title, desc, selectedType, triggerMillis, offsetDays)
+                onSave(title.trim(), desc, selectedType, triggerMillis, offsetDays)
+            } else {
+                Toast.makeText(context, "لطفاً عنوان یادآور را وارد کنید", Toast.LENGTH_SHORT).show()
             }
         }
     ) {

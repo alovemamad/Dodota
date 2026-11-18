@@ -57,7 +57,7 @@ fun SplashScreen(
         if (animationDone && userPreferences != null) {
             if (!userPreferences.isOnboardingCompleted) {
                 onNavigateToOnboarding()
-            } else if (userPreferences.isAppLockEnabled) {
+            } else if (userPreferences.isPinEnabled) {
                 onNavigateToLock()
             } else {
                 onNavigateToMain()

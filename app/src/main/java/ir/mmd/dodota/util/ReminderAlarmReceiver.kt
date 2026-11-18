@@ -6,8 +6,6 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
-import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -18,8 +16,9 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action
-        val reminderId = intent.getLongExtra(AlarmHelper.EXTRA_REMINDER_ID, System.currentTimeMillis())
-        val notifId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, reminderId.toInt())
+        val reminderId = intent.getLongExtra(AlarmHelper.EXTRA_REMINDER_ID, DEFAULT_ALARM_NOTIF_ID.toLong())
+        val rawNotifId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, reminderId.toInt())
+        val notifId = (rawNotifId and 0x0FFFFFFF).coerceAtLeast(1)
         val title = intent.getStringExtra(AlarmHelper.EXTRA_REMINDER_TITLE) ?: "یادآور موعد مالی و چک"
         val desc = intent.getStringExtra(AlarmHelper.EXTRA_REMINDER_DESC) ?: "سررسید چک، قسط یا بدهی فرا رسیده است."
 
@@ -76,20 +75,18 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
             message: String
         ) {
             ensureAlarmChannel(context)
-            val effectiveReminderId = if (reminderId > 0L) reminderId else notifId.toLong()
-
-            val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            val safeNotifId = (notifId and 0x0FFFFFFF).coerceAtLeast(1)
+            val effectiveReminderId = if (reminderId > 0L) reminderId else safeNotifId.toLong()
 
             // 1. Action: Stop Alarm / Dismiss
             val dismissIntent = Intent(context, ReminderAlarmReceiver::class.java).apply {
                 action = ACTION_DISMISS_ALARM
-                putExtra(EXTRA_NOTIFICATION_ID, notifId)
+                putExtra(EXTRA_NOTIFICATION_ID, safeNotifId)
                 putExtra(AlarmHelper.EXTRA_REMINDER_ID, effectiveReminderId)
             }
             val dismissPendingIntent = PendingIntent.getBroadcast(
                 context,
-                notifId * 3 + 1,
+                safeNotifId * 3 + 1,
                 dismissIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
@@ -97,14 +94,14 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
             // 2. Action: Snooze 10 minutes
             val snoozeIntent = Intent(context, ReminderAlarmReceiver::class.java).apply {
                 action = ACTION_SNOOZE_ALARM
-                putExtra(EXTRA_NOTIFICATION_ID, notifId)
+                putExtra(EXTRA_NOTIFICATION_ID, safeNotifId)
                 putExtra(AlarmHelper.EXTRA_REMINDER_ID, effectiveReminderId)
                 putExtra(AlarmHelper.EXTRA_REMINDER_TITLE, title)
                 putExtra(AlarmHelper.EXTRA_REMINDER_DESC, message)
             }
             val snoozePendingIntent = PendingIntent.getBroadcast(
                 context,
-                notifId * 3 + 2,
+                safeNotifId * 3 + 2,
                 snoozeIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
@@ -113,14 +110,14 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
             val openIntent = Intent(context, MainActivity::class.java).apply {
                 action = ACTION_OPEN_ALARM
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra(EXTRA_NOTIFICATION_ID, notifId)
+                putExtra(EXTRA_NOTIFICATION_ID, safeNotifId)
                 putExtra(AlarmHelper.EXTRA_REMINDER_ID, effectiveReminderId)
                 putExtra(AlarmHelper.EXTRA_REMINDER_TITLE, title)
                 putExtra(AlarmHelper.EXTRA_REMINDER_DESC, message)
             }
             val contentPendingIntent = PendingIntent.getActivity(
                 context,
-                notifId,
+                safeNotifId,
                 openIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
@@ -148,7 +145,7 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
                 )
 
             try {
-                NotificationManagerCompat.from(context).notify(notifId, builder.build())
+                NotificationManagerCompat.from(context).notify(safeNotifId, builder.build())
             } catch (_: Exception) {}
         }
     }

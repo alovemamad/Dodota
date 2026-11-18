@@ -98,7 +98,7 @@ fun RecoveryScreen(
                     val cleanEntered = enteredCode.trim().uppercase()
                     val cleanStored = userPreferences.recoveryCode.trim().uppercase()
 
-                    if (cleanEntered.isNotEmpty() && (cleanEntered == cleanStored || cleanStored.isEmpty())) {
+                    if (cleanStored.isNotEmpty() && cleanEntered == cleanStored) {
                         coroutineScope.launch {
                             // Disable lock so user can access and set new PIN in Settings
                             preferencesRepo.setAppLock(

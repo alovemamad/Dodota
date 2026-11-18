@@ -25,7 +25,7 @@ object TelegramHelper {
                 browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(browserIntent)
             } catch (_: Exception) {
-                Toast.makeText(context, "برنامه تلگرام یا مرورگر یافت نشد: @$targetUsername", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "برنامه تلگرام یا مرورگر یافت نشد", Toast.LENGTH_LONG).show()
             }
         }
     }

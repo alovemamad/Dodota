@@ -34,6 +34,7 @@ import ir.mmd.dodota.data.model.DebtPaymentEntity
 import ir.mmd.dodota.data.model.DebtType
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
+import ir.mmd.dodota.ui.components.DodotaDropdownField
 import ir.mmd.dodota.ui.components.DodotaPrintDialog
 import ir.mmd.dodota.ui.components.DodotaPrintIconButton
 import ir.mmd.dodota.ui.components.DodotaTextField
@@ -379,7 +380,7 @@ fun DebtDetailScreen(
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        text = PersianDateHelper.formatToPersianDate(payment.dateMillis),
+                                        text = PersianDateHelper.formatToPersianDate(payment.dateMillis, userPreferences.currency.isEnglishDigits),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline
                                     )
@@ -416,9 +417,15 @@ fun DebtDetailScreen(
         val d = debt!!
         val isOwe = d.type == DebtType.DEBT_I_OWE
         val isCheck = d.isCheck || d.personOrCompanyName.contains("چک") || d.notes.contains("چک")
-        var paymentAmountText by remember { mutableStateOf("") }
-        var paymentNote by remember { mutableStateOf("") }
-        var selectedAccId by remember { mutableStateOf<Long?>(accounts.firstOrNull()?.id) }
+        val activeAccounts = remember(accounts) { accounts.filter { it.isActive }.ifEmpty { accounts } }
+        var paymentAmountText by remember(d.id) { mutableStateOf("") }
+        var paymentNote by remember(d.id) { mutableStateOf("") }
+        var selectedAccId by remember(d.id, activeAccounts) {
+            mutableStateOf<Long?>(
+                d.accountId?.takeIf { id -> activeAccounts.any { it.id == id } }
+                    ?: activeAccounts.firstOrNull()?.id
+            )
+        }
 
         GraphicalFormDialog(
             onDismissRequest = { showPaymentDialog = false },
@@ -443,6 +450,8 @@ fun DebtDetailScreen(
                         Toast.makeText(context, if (isOwe) "پرداخت با موفقیت ثبت شد" else "دریافت با موفقیت ثبت شد", Toast.LENGTH_SHORT).show()
                         showPaymentDialog = false
                     }
+                } else {
+                    Toast.makeText(context, "لطفاً مبلغ معتبر وارد کنید", Toast.LENGTH_SHORT).show()
                 }
             }
         ) {
@@ -452,6 +461,18 @@ fun DebtDetailScreen(
                 currency = userPreferences.currency,
                 label = if (isOwe) "مبلغ پرداخت‌شده" else "مبلغ دریافت‌شده"
             )
+            if (activeAccounts.isNotEmpty()) {
+                val selectedAccObj = activeAccounts.firstOrNull { it.id == selectedAccId } ?: activeAccounts.first()
+                DodotaDropdownField(
+                    label = if (isOwe) "حساب پرداخت‌کننده" else "حساب دریافت‌کننده",
+                    selectedText = "${selectedAccObj.name} (${PersianNumberFormatter.formatCurrency(selectedAccObj.balance, userPreferences.currency)})",
+                    items = activeAccounts,
+                    itemText = { it.name },
+                    itemSubtitle = { "موجودی: ${PersianNumberFormatter.formatCurrency(it.balance, userPreferences.currency)}" },
+                    onItemSelected = { selectedAccId = it.id },
+                    leadingIcon = Icons.Default.CreditCard
+                )
+            }
             DodotaTextField(
                 value = paymentNote,
                 onValueChange = { paymentNote = it },

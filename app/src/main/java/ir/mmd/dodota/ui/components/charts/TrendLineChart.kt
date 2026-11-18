@@ -27,8 +27,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import ir.mmd.dodota.data.model.AppCurrency
 import ir.mmd.dodota.util.PersianNumberFormatter
@@ -220,24 +222,26 @@ fun TrendLineChart(
             }
         }
 
-        // Labels row below line chart
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            val step = (points.size / 5).coerceAtLeast(1)
-            points.forEachIndexed { index, point ->
-                if (index % step == 0 || index == points.lastIndex) {
-                    val isSelected = selectedIndex == index
-                    Text(
-                        text = PersianNumberFormatter.formatDigits(point.label, currency),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Normal,
-                        color = if (isSelected) lineColor else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .clickable { selectedIndex = index }
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                    )
+        // Labels row below line chart (LTR to match Canvas points 0..last)
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                val step = (points.size / 5).coerceAtLeast(1)
+                points.forEachIndexed { index, point ->
+                    if (index % step == 0 || index == points.lastIndex) {
+                        val isSelected = selectedIndex == index
+                        Text(
+                            text = PersianNumberFormatter.formatDigits(point.label, currency),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Normal,
+                            color = if (isSelected) lineColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .clickable { selectedIndex = index }
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
         }

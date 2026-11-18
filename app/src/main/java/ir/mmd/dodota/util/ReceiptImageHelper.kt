@@ -25,21 +25,46 @@ object ReceiptImageHelper {
      */
     fun saveGalleryUriToInternalStorage(context: Context, uri: Uri): String? {
         return try {
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-            val originalBitmap = BitmapFactory.decodeStream(inputStream)
-            inputStream.close()
-            if (originalBitmap == null) return null
+            val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, boundsOptions)
+            } ?: return null
+
+            val decodeOptions = BitmapFactory.Options().apply {
+                inSampleSize = calculateInSampleSize(boundsOptions, 1280, 1280)
+            }
+            val originalBitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, decodeOptions)
+            } ?: return null
 
             val scaledBitmap = scaleBitmapDown(originalBitmap, 1280)
-            val destFile = File(getReceiptsDir(context), "receipt_${System.currentTimeMillis()}.jpg")
+            val destFile = File(getReceiptsDir(context), "receipt_${System.currentTimeMillis()}_${(100..999).random()}.jpg")
             FileOutputStream(destFile).use { out ->
                 scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 82, out)
             }
+            if (scaledBitmap !== originalBitmap) {
+                originalBitmap.recycle()
+            }
+            scaledBitmap.recycle()
             destFile.absolutePath
         } catch (e: Exception) {
             e.printStackTrace()
             null
         }
+    }
+
+    private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+        val height = options.outHeight
+        val width = options.outWidth
+        var inSampleSize = 1
+        if (height > reqHeight || width > reqWidth) {
+            val halfHeight = height / 2
+            val halfWidth = width / 2
+            while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
     }
 
     fun loadReceiptBitmap(context: Context, pathOrUri: String?): Bitmap? {

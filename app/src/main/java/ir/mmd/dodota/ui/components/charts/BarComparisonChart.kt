@@ -28,8 +28,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import ir.mmd.dodota.data.model.AppCurrency
 import ir.mmd.dodota.ui.theme.ExpenseRed
@@ -228,29 +230,31 @@ fun BarComparisonChart(
             }
         }
 
-        // Labels row below bars
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            groups.forEachIndexed { index, group ->
-                val isSelected = selectedIndex == index
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { selectedIndex = if (selectedIndex == index) null else index }
-                        .padding(horizontal = 2.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = PersianNumberFormatter.formatDigits(group.label, currency),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Normal,
-                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 4.dp),
-                        textAlign = TextAlign.Center
-                    )
+        // Labels row below bars (LTR to match Canvas bar positions 0..last)
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                groups.forEachIndexed { index, group ->
+                    val isSelected = selectedIndex == index
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { selectedIndex = if (selectedIndex == index) null else index }
+                            .padding(horizontal = 2.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = PersianNumberFormatter.formatDigits(group.label, currency),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 4.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
         }

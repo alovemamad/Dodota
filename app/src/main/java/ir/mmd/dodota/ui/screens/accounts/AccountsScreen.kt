@@ -658,6 +658,7 @@ fun EditAccountDialog(
     onDismiss: () -> Unit,
     onSave: (name: String, type: AccountType, bank: String, balance: Long, color: String) -> Unit
 ) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf(account.name) }
     var bankName by remember { mutableStateOf(account.bankName) }
     var balanceText by remember { mutableStateOf(account.balance.toString()) }
@@ -680,7 +681,9 @@ fun EditAccountDialog(
         onConfirm = {
             if (name.isNotBlank()) {
                 val balance = PersianNumberFormatter.parseAmount(balanceText)
-                onSave(name, selectedType, bankName, balance, selectedColor)
+                onSave(name.trim(), selectedType, bankName, balance, selectedColor)
+            } else {
+                Toast.makeText(context, "لطفاً نام حساب را وارد کنید", Toast.LENGTH_SHORT).show()
             }
         }
     ) {

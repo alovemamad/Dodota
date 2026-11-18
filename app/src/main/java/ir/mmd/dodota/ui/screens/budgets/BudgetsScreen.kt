@@ -358,6 +358,7 @@ fun AddBudgetDialog(
     onDismiss: () -> Unit,
     onSave: (categoryId: Long, amount: Long, warningThreshold: Int) -> Unit
 ) {
+    val context = LocalContext.current
     var selectedCatId by remember { mutableStateOf<Long?>(categories.firstOrNull()?.id) }
     var amountText by remember { mutableStateOf("") }
     var warningThreshold by remember { mutableIntStateOf(55) }
@@ -371,8 +372,10 @@ fun AddBudgetDialog(
         confirmText = "ذخیره بودجه",
         onConfirm = {
             val amount = PersianNumberFormatter.parseAmount(amountText)
-            if (selectedCatId != null && amount > 0L) {
-                onSave(selectedCatId!!, amount, warningThreshold)
+            when {
+                selectedCatId == null -> Toast.makeText(context, "لطفاً دسته‌بندی را انتخاب کنید", Toast.LENGTH_SHORT).show()
+                amount <= 0L -> Toast.makeText(context, "لطفاً مبلغ معتبری وارد کنید", Toast.LENGTH_SHORT).show()
+                else -> onSave(selectedCatId!!, amount, warningThreshold)
             }
         }
     ) {
@@ -447,6 +450,7 @@ fun EditBudgetDialog(
     onDismiss: () -> Unit,
     onSave: (newAmount: Long, warningThreshold: Int) -> Unit
 ) {
+    val context = LocalContext.current
     var amountText by remember { mutableStateOf(budget.monthlyAmount.toString()) }
     var warningThreshold by remember { mutableIntStateOf(budget.warningThresholdPercent) }
 
@@ -459,6 +463,8 @@ fun EditBudgetDialog(
             val amount = PersianNumberFormatter.parseAmount(amountText)
             if (amount > 0L) {
                 onSave(amount, warningThreshold)
+            } else {
+                Toast.makeText(context, "لطفاً مبلغ معتبری وارد کنید", Toast.LENGTH_SHORT).show()
             }
         }
     ) {

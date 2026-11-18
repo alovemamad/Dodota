@@ -6,7 +6,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -99,21 +98,21 @@ fun AboutScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "توسعه‌دهنده: Mmd\nجهت ارسال پیشنهادات، گزارش خطا یا دریافت راهنمایی می‌توانید از طریق آیدی تلگرام زیر با ما در ارتباط باشید:",
+                            text = "توسعه‌دهنده: Mmd\nجهت ارسال پیشنهادات، گزارش خطا یا دریافت راهنمایی می‌توانید از طریق تلگرام با ما در ارتباط باشید:",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline
                         )
                         Spacer(modifier = Modifier.height(14.dp))
                         Button(
                             onClick = {
-                                TelegramHelper.openTelegramProfile(context, "momo1f")
+                                TelegramHelper.openTelegramSupport(context)
                             },
                             shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("ارتباط با پشتیبانی در تلگرام (momo1f@)")
+                            Text("ارتباط با پشتیبانی در تلگرام")
                         }
                     }
                 }

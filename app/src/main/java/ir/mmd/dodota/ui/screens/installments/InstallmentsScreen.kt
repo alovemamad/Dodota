@@ -1154,7 +1154,7 @@ fun InstallmentsScreen(
                                                             repository.payInstallment(
                                                                 plan = plan,
                                                                 installment = inst,
-                                                                accountId = plan.accountId ?: accounts.firstOrNull()?.id
+                                                                accountId = plan.accountId ?: accounts.firstOrNull { it.isActive }?.id ?: accounts.firstOrNull()?.id
                                                             )
                                                             Toast.makeText(context, "قسط معوقه ${PersianNumberFormatter.formatDigits(inst.installmentIndex)} با موفقیت پرداخت شد ✓", Toast.LENGTH_SHORT).show()
                                                         }
@@ -1323,7 +1323,7 @@ fun InstallmentsScreen(
                                                             repository.payInstallment(
                                                                 plan = plan,
                                                                 installment = inst,
-                                                                accountId = plan.accountId ?: accounts.firstOrNull()?.id
+                                                                accountId = plan.accountId ?: accounts.firstOrNull { it.isActive }?.id ?: accounts.firstOrNull()?.id
                                                             )
                                                             Toast.makeText(context, "قسط ${PersianNumberFormatter.formatDigits(inst.installmentIndex)} با موفقیت پرداخت شد ✓", Toast.LENGTH_SHORT).show()
                                                         }
@@ -1613,7 +1613,7 @@ fun InstallmentsScreen(
                                                             repository.payInstallment(
                                                                 plan = plan,
                                                                 installment = inst,
-                                                                accountId = plan.accountId ?: accounts.firstOrNull()?.id
+                                                                accountId = plan.accountId ?: accounts.firstOrNull { it.isActive }?.id ?: accounts.firstOrNull()?.id
                                                             )
                                                             Toast.makeText(
                                                                 context,
@@ -2292,6 +2292,7 @@ fun AddInstallmentDialog(
         reminderMinute: Int
     ) -> Unit
 ) {
+    val context = LocalContext.current
     var title by remember { mutableStateOf("") }
     var creditor by remember { mutableStateOf("") }
     var totalLoanAmountText by remember { mutableStateOf("") }
@@ -2325,25 +2326,30 @@ fun AddInstallmentDialog(
             val amount = PersianNumberFormatter.parseAmount(amountText)
             val totalLoan = PersianNumberFormatter.parseAmount(totalLoanAmountText)
             val day = dayText.toIntOrNull()?.coerceIn(1, 31) ?: 1
-            if (title.isNotBlank() && count > 0 && amount > 0L) {
-                val effectiveTotalLoan = if (totalLoan > 0L) totalLoan else (count * amount)
-                onSave(
-                    title.trim(),
-                    creditor.trim(),
-                    effectiveTotalLoan,
-                    count,
-                    paidBefore.coerceIn(0, count),
-                    amount,
-                    day,
-                    startDateMillis,
-                    notes.trim(),
-                    autoCreateExpense,
-                    if (autoCreateExpense) selectedAccountId else null,
-                    enableReminder,
-                    offsetDays,
-                    reminderHour,
-                    reminderMinute
-                )
+            when {
+                title.isBlank() -> Toast.makeText(context, "لطفاً عنوان وام یا قسط را وارد کنید", Toast.LENGTH_SHORT).show()
+                count <= 0 -> Toast.makeText(context, "تعداد اقساط باید بیشتر از صفر باشد", Toast.LENGTH_SHORT).show()
+                amount <= 0L -> Toast.makeText(context, "لطفاً مبلغ معتبری وارد کنید", Toast.LENGTH_SHORT).show()
+                else -> {
+                    val effectiveTotalLoan = if (totalLoan > 0L) totalLoan else (count * amount)
+                    onSave(
+                        title.trim(),
+                        creditor.trim(),
+                        effectiveTotalLoan,
+                        count,
+                        paidBefore.coerceIn(0, count),
+                        amount,
+                        day,
+                        startDateMillis,
+                        notes.trim(),
+                        autoCreateExpense,
+                        if (autoCreateExpense) selectedAccountId else null,
+                        enableReminder,
+                        offsetDays,
+                        reminderHour,
+                        reminderMinute
+                    )
+                }
             }
         },
         onDismiss = onDismiss
@@ -2385,7 +2391,7 @@ fun AddInstallmentDialog(
         ) {
             Icon(Icons.Outlined.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("تاریخ شروع اولین قسط: ${PersianDateHelper.formatToPersianDate(startDateMillis)}")
+            Text("تاریخ شروع اولین قسط: ${PersianDateHelper.formatToPersianDate(startDateMillis, currency.isEnglishDigits)}")
         }
 
         Row(
@@ -2500,6 +2506,7 @@ fun EditInstallmentPlanDialog(
         reminderMinute: Int
     ) -> Unit
 ) {
+    val context = LocalContext.current
     var title by remember(plan.id) { mutableStateOf(plan.title) }
     var creditor by remember(plan.id) { mutableStateOf(plan.creditorOrCompany) }
     var totalLoanAmountText by remember(plan.id) {
@@ -2585,6 +2592,8 @@ fun EditInstallmentPlanDialog(
                     reminderHour,
                     reminderMinute
                 )
+            } else {
+                Toast.makeText(context, "لطفاً عنوان وام یا قسط را وارد کنید", Toast.LENGTH_SHORT).show()
             }
         },
         onDismiss = onDismiss
@@ -2623,7 +2632,7 @@ fun EditInstallmentPlanDialog(
         ) {
             Icon(Icons.Outlined.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("تاریخ شروع اولین قسط: ${PersianDateHelper.formatToPersianDate(startDateMillis)}")
+            Text("تاریخ شروع اولین قسط: ${PersianDateHelper.formatToPersianDate(startDateMillis, currency.isEnglishDigits)}")
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -2732,7 +2741,7 @@ private fun InstallmentAccountAndNotesSection(
     notes: String,
     onNotesChange: (String) -> Unit
 ) {
-    val activeAccounts = remember(accounts) { accounts.filter { it.isActive } }
+    val activeAccounts = remember(accounts) { accounts.filter { it.isActive }.ifEmpty { accounts } }
 
     Surface(
         shape = RoundedCornerShape(14.dp),

@@ -452,13 +452,13 @@ fun InstallmentDetailScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "شروع: ${PersianDateHelper.formatToPersianDate(p.startDateMillis)}",
+                                    text = "شروع: ${PersianDateHelper.formatToPersianDate(p.startDateMillis, userPreferences.currency.isEnglishDigits)}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = IncomeGreen,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "اتمام: ${PersianDateHelper.formatToPersianDate(endDateMillis)}",
+                                    text = "اتمام: ${PersianDateHelper.formatToPersianDate(endDateMillis, userPreferences.currency.isEnglishDigits)}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = accentColor,
                                     fontWeight = FontWeight.ExtraBold
@@ -529,7 +529,7 @@ fun InstallmentDetailScreen(
                                 repository.payInstallment(
                                     plan = p,
                                     installment = inst,
-                                    accountId = p.accountId ?: accounts.firstOrNull()?.id
+                                    accountId = p.accountId ?: accounts.firstOrNull { it.isActive }?.id ?: accounts.firstOrNull()?.id
                                 )
                                 Toast.makeText(context, "قسط ${PersianNumberFormatter.formatDigits(inst.installmentIndex)} پرداخت شد ✓", Toast.LENGTH_SHORT).show()
                             }
@@ -636,7 +636,7 @@ fun InstallmentDetailScreen(
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = "سررسید: ${PersianDateHelper.formatToPersianDate(inst.dueDateMillis)}",
+                                            text = "سررسید: ${PersianDateHelper.formatToPersianDate(inst.dueDateMillis, userPreferences.currency.isEnglishDigits)}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = if (isOverdue) ExpenseRed.copy(alpha = 0.85f) else MaterialTheme.colorScheme.outline
                                         )
@@ -929,7 +929,7 @@ private fun EditSingleInstallmentDialog(
         ) {
             Icon(Icons.Outlined.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("تاریخ سررسید: ${PersianDateHelper.formatToPersianDate(dueDateMillis)}")
+            Text("تاریخ سررسید: ${PersianDateHelper.formatToPersianDate(dueDateMillis, currency.isEnglishDigits)}")
         }
         Surface(
             shape = RoundedCornerShape(14.dp),

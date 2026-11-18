@@ -765,7 +765,7 @@ fun HomeScreen(
                 when (key) {
                     "accounts" -> activeAccounts.size
                     "transactions" -> allTransactions.count { inRange(it.dateMillis) }
-                    "debts" -> debts.count { !it.isCheck && inRange(it.dueDateMillis ?: it.startDateMillis) }
+                    "debts" -> debts.count { !(it.isCheck || it.personOrCompanyName.contains("چک") || it.notes.contains("چک")) && inRange(it.dueDateMillis ?: it.startDateMillis) }
                     "checks" -> debts.count { (it.isCheck || it.personOrCompanyName.contains("چک") || it.notes.contains("چک")) && inRange(it.dueDateMillis ?: it.startDateMillis) }
                     "installments" -> allInstallments.count { inRange(it.dueDateMillis) }
                     "budgets" -> allBudgets.size

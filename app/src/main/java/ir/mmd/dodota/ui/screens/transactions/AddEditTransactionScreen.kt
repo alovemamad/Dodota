@@ -90,6 +90,12 @@ fun AddEditTransactionScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(accounts, existingTransaction) {
+        if (existingTransaction == null && selectedAccountId == null && accounts.isNotEmpty()) {
+            selectedAccountId = accounts.firstOrNull { it.isActive }?.id ?: accounts.firstOrNull()?.id
+        }
+    }
+
     // Ensure "انتقال به شخص دیگر" exists in Expense categories per Item 14
     LaunchedEffect(categories) {
         if (categories.isNotEmpty() && categories.none { it.type == TransactionType.EXPENSE && it.name == "انتقال به شخص دیگر" }) {
@@ -118,7 +124,7 @@ fun AddEditTransactionScreen(
                     receiptUriString = savedPath
                     Toast.makeText(context, "تصویر سند ثبت و ذخیره شد ✅", Toast.LENGTH_SHORT).show()
                 } else {
-                    receiptUriString = uri.toString()
+                    Toast.makeText(context, "خطا در ذخیره‌سازی تصویر سند", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -207,6 +213,7 @@ fun AddEditTransactionScreen(
 
     // Item 27: Header strictly shows only the active section's own title
     val screenHeaderTitle = when {
+        existingTransaction?.type == TransactionType.TRANSFER -> "ویرایش انتقال"
         existingTransaction != null && selectedType == TransactionType.INCOME -> "ویرایش درآمد"
         existingTransaction != null -> "ویرایش هزینه"
         selectedType == TransactionType.INCOME -> "ثبت درآمد"
@@ -441,8 +448,9 @@ fun AddEditTransactionScreen(
             }
 
             // 3. Account Selection
-            val activeAccounts = remember(accounts) { accounts.filter { it.isActive } }
+            val activeAccounts = remember(accounts) { accounts.filter { it.isActive }.ifEmpty { accounts } }
             val selectedAccountObj = activeAccounts.firstOrNull { it.id == selectedAccountId }
+                ?: accounts.firstOrNull { it.id == selectedAccountId }
             DodotaExpandableSelector(
                 label = "حساب یا کارت بانکی",
                 selectedTitle = selectedAccountObj?.name ?: "انتخاب حساب",
@@ -539,7 +547,7 @@ fun AddEditTransactionScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = PersianDateHelper.formatToPersianDate(selectedDateMillis),
+                                text = PersianDateHelper.formatToPersianDate(selectedDateMillis, userPreferences.currency.isEnglishDigits),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold
@@ -748,8 +756,24 @@ fun AddEditTransactionScreen(
                             title.trim().ifBlank { defaultTitle }
                         }
 
-                        val newTx = TransactionEntity(
-                            id = existingTransaction?.id ?: 0L,
+                        val resolvedType = if (existingTransaction?.type == TransactionType.TRANSFER) {
+                            TransactionType.TRANSFER
+                        } else {
+                            selectedType
+                        }
+                        val newTx = existingTransaction?.copy(
+                            type = resolvedType,
+                            amount = amount,
+                            accountId = accId,
+                            categoryId = selectedCategoryId,
+                            dateMillis = selectedDateMillis,
+                            title = resolvedTitle,
+                            note = note.trim(),
+                            tags = tags.trim(),
+                            isPinned = isPinned,
+                            receiptUri = receiptUriString
+                        ) ?: TransactionEntity(
+                            id = 0L,
                             type = selectedType,
                             amount = amount,
                             accountId = accId,

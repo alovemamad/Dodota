@@ -152,7 +152,8 @@ fun LockScreen(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.padding(vertical = 12.dp)
                 ) {
-                    (0 until 4).forEach { index ->
+                    val dotCount = maxOf(4, enteredPin.length).coerceAtMost(6)
+                    (0 until dotCount).forEach { index ->
                         val isFilled = index < enteredPin.length
                         Box(
                             modifier = Modifier
@@ -207,7 +208,7 @@ fun LockScreen(
                                         if (userPreferences.isBiometricEnabled) {
                                             IconButton(
                                                 onClick = {
-                                                    if (context is FragmentActivity) {
+                                                    if (!isUnlocked && context is FragmentActivity) {
                                                         val executor = ContextCompat.getMainExecutor(context)
                                                         val biometricPrompt = BiometricPrompt(
                                                             context,
@@ -215,7 +216,10 @@ fun LockScreen(
                                                             object : BiometricPrompt.AuthenticationCallback() {
                                                                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                                                                     super.onAuthenticationSucceeded(result)
-                                                                    onUnlocked()
+                                                                    if (!isUnlocked) {
+                                                                        isUnlocked = true
+                                                                        onUnlocked()
+                                                                    }
                                                                 }
                                                             }
                                                         )

@@ -20,7 +20,7 @@ object SecurityHelper {
      * Verifies if the entered PIN matches the stored hash.
      */
     fun verifyPin(pin: String, storedHash: String): Boolean {
-        if (storedHash.isEmpty()) return true
+        if (storedHash.isBlank() || pin.isBlank()) return false
         return hashPin(pin) == storedHash
     }
 

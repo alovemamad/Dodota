@@ -83,8 +83,14 @@ fun ReportsScreen(
                 transactions.filter { it.dateMillis in start..end }
             }
             ReportPeriod.LAST_THREE_MONTHS -> {
-                val startMonth = (currentPDate.month - 2).coerceAtLeast(1)
-                val start = PersianDateHelper.getStartOfMonthMillis(currentPDate.year, startMonth)
+                var startYear = currentPDate.year
+                var startMonth = currentPDate.month
+                repeat(2) {
+                    val prev = PersianDateHelper.getPreviousPersianMonth(startYear, startMonth)
+                    startYear = prev.first
+                    startMonth = prev.second
+                }
+                val start = PersianDateHelper.getStartOfMonthMillis(startYear, startMonth)
                 val end = PersianDateHelper.getEndOfMonthMillis(currentPDate.year, currentPDate.month)
                 transactions.filter { it.dateMillis in start..end }
             }
@@ -171,49 +177,55 @@ fun ReportsScreen(
             .sortedByDescending { it.amount }
     }
 
-    // Groups for Bar Comparison Chart (Last 6 Months) - Single pass O(N) accumulation
+    // Groups for Bar Comparison Chart (Last 6 Months across year boundaries) - Single pass O(N) accumulation
     val barGroups = remember(transactions, currentPDate.year, currentPDate.month) {
-        val monthsList = (1..currentPDate.month).toList().takeLast(6)
-        if (monthsList.isEmpty()) {
-            emptyList()
-        } else {
-            val startBounds = LongArray(monthsList.size)
-            val endBounds = LongArray(monthsList.size)
-            val incomeTotals = LongArray(monthsList.size)
-            val expenseTotals = LongArray(monthsList.size)
-            for (i in monthsList.indices) {
-                startBounds[i] = PersianDateHelper.getStartOfMonthMillis(currentPDate.year, monthsList[i])
-                endBounds[i] = PersianDateHelper.getEndOfMonthMillis(currentPDate.year, monthsList[i])
+        val monthPairs = buildList {
+            var y = currentPDate.year
+            var m = currentPDate.month
+            repeat(6) {
+                add(y to m)
+                val prev = PersianDateHelper.getPreviousPersianMonth(y, m)
+                y = prev.first
+                m = prev.second
             }
-            val minBound = startBounds.first()
-            val maxBound = endBounds.last()
-            for (tx in transactions) {
-                val ms = tx.dateMillis
-                if (ms < minBound || ms > maxBound) continue
-                for (i in monthsList.indices) {
-                    if (ms in startBounds[i]..endBounds[i]) {
-                        when (tx.type) {
-                            TransactionType.INCOME -> incomeTotals[i] += tx.amount
-                            TransactionType.EXPENSE -> expenseTotals[i] += tx.amount
-                            TransactionType.TRANSFER -> Unit
-                        }
-                        break
+        }.reversed()
+        val startBounds = LongArray(monthPairs.size)
+        val endBounds = LongArray(monthPairs.size)
+        val incomeTotals = LongArray(monthPairs.size)
+        val expenseTotals = LongArray(monthPairs.size)
+        for (i in monthPairs.indices) {
+            val (y, m) = monthPairs[i]
+            startBounds[i] = PersianDateHelper.getStartOfMonthMillis(y, m)
+            endBounds[i] = PersianDateHelper.getEndOfMonthMillis(y, m)
+        }
+        val minBound = startBounds.first()
+        val maxBound = endBounds.last()
+        for (tx in transactions) {
+            val ms = tx.dateMillis
+            if (ms < minBound || ms > maxBound) continue
+            for (i in monthPairs.indices) {
+                if (ms in startBounds[i]..endBounds[i]) {
+                    when (tx.type) {
+                        TransactionType.INCOME -> incomeTotals[i] += tx.amount
+                        TransactionType.EXPENSE -> expenseTotals[i] += tx.amount
+                        TransactionType.TRANSFER -> Unit
                     }
+                    break
                 }
             }
-            monthsList.mapIndexed { idx, m ->
-                val label = PersianDateHelper.PERSIAN_MONTHS.getOrNull(m - 1) ?: "ماه $m"
-                BarComparisonGroup(
-                    label = label,
-                    incomeAmount = incomeTotals[idx],
-                    expenseAmount = expenseTotals[idx]
-                )
-            }
+        }
+        monthPairs.mapIndexed { idx, (_, m) ->
+            val label = PersianDateHelper.PERSIAN_MONTHS.getOrNull(m - 1) ?: "ماه $m"
+            BarComparisonGroup(
+                label = label,
+                incomeAmount = incomeTotals[idx],
+                expenseAmount = expenseTotals[idx]
+            )
         }
     }
 
     // Points for Trend Line Chart
-    val trendPoints = remember(filteredTransactions, selectedPeriod) {
+    val trendPoints = remember(filteredTransactions, selectedPeriod, barGroups, userPreferences.currency, currentPDate.month) {
         if (selectedPeriod == ReportPeriod.THIS_MONTH) {
             val groupedByDay = filteredTransactions
                 .groupBy {

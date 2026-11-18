@@ -48,7 +48,6 @@ import ir.mmd.dodota.util.GitHubUpdateHelper
 import ir.mmd.dodota.util.GitHubUpdateResult
 import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
-import ir.mmd.dodota.util.TelegramHelper
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -228,7 +227,7 @@ fun SettingsScreen(
             item {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "بروزرسانی، پشتیبانی و درباره دودوتا",
+                    text = "بروزرسانی و درباره دودوتا",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -253,18 +252,6 @@ fun SettingsScreen(
                     subtitle = updateSubtitle,
                     onClick = { showGithubUpdateDialog = true },
                     testTag = "settings_github_update_card"
-                )
-            }
-
-            item {
-                SettingsItemCard(
-                    icon = Icons.Outlined.Send,
-                    title = "ارتباط با پشتیبانی در تلگرام",
-                    subtitle = "@momo1f",
-                    onClick = {
-                        TelegramHelper.openTelegramProfile(context, "momo1f")
-                    },
-                    testTag = "settings_telegram_card"
                 )
             }
 
@@ -652,7 +639,10 @@ private fun TypographyCustomizationDialog(
                                     )
                                     if (currentPercent != 100) {
                                         TextButton(
-                                            onClick = { onChangeFontScale(1.0f) },
+                                            onClick = {
+                                                activeScale = 1.0f
+                                                onChangeFontScale(1.0f)
+                                            },
                                             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                                             modifier = Modifier.height(28.dp)
                                         ) {
@@ -689,8 +679,8 @@ private fun TypographyCustomizationDialog(
                                          activeScale = it
                                          onChangeFontScale(it)
                                      },
-                                     valueRange = 0.80f..1.30f,
-                                     steps = 9,
+                                     valueRange = 0.80f..1.35f,
+                                     steps = 10,
                                      modifier = Modifier
                                          .weight(1f)
                                          .testTag("font_scale_slider")

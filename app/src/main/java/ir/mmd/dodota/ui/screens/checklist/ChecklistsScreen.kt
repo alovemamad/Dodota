@@ -212,7 +212,7 @@ fun ChecklistsScreen(
                                         color = if (isSelected) catStyle.accentColor else MaterialTheme.colorScheme.surface
                                     ) {
                                         Text(
-                                            text = PersianNumberFormatter.toPersianDigits(count),
+                                            text = PersianNumberFormatter.formatDigits(count, userPreferences.currency),
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -565,7 +565,7 @@ fun ChecklistCard(
                                 )
                             }
                             Text(
-                                text = "${PersianNumberFormatter.toPersianDigits(completedCount)} از ${PersianNumberFormatter.toPersianDigits(totalCount)} (${PersianNumberFormatter.toPersianDigits(percentPaid)}٪)",
+                                text = "${PersianNumberFormatter.formatDigits(completedCount, userPreferences.currency)} از ${PersianNumberFormatter.formatDigits(totalCount, userPreferences.currency)} (${PersianNumberFormatter.formatDigits(percentPaid, userPreferences.currency)}٪)",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = if (percentPaid >= 100 && totalCount > 0) IncomeGreen else MaterialTheme.colorScheme.outline
@@ -1188,7 +1188,8 @@ fun ConvertToExpenseDialog(
     onDismiss: () -> Unit,
     onConfirm: (accountId: Long, categoryId: Long?) -> Unit
 ) {
-    var selectedAccountId by remember { mutableLongStateOf(accounts.firstOrNull()?.id ?: 0L) }
+    val activeAccounts = remember(accounts) { accounts.filter { it.isActive }.ifEmpty { accounts } }
+    var selectedAccountId by remember(activeAccounts) { mutableLongStateOf(activeAccounts.firstOrNull()?.id ?: 0L) }
     var selectedCategoryId by remember {
         mutableStateOf<Long?>(categories.firstOrNull { it.type == TransactionType.EXPENSE }?.id)
     }
@@ -1229,7 +1230,7 @@ fun ConvertToExpenseDialog(
 
         Text("حساب:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(accounts) { acc ->
+            items(activeAccounts) { acc ->
                 FilterChip(
                     selected = selectedAccountId == acc.id,
                     onClick = { selectedAccountId = acc.id },

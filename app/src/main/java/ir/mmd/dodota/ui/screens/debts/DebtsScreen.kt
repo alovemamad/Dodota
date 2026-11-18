@@ -637,6 +637,7 @@ fun DebtsScreen(
             title = if (isOwe) "تنظیم یادآور بدهی: ${debt.personOrCompanyName}" else "تنظیم یادآور طلب: ${debt.personOrCompanyName}",
             initialDueDateMillis = debt.dueDateMillis ?: System.currentTimeMillis(),
             existingReminder = debtReminderMap[debt.id],
+            currency = userPreferences.currency,
             onDismiss = { itemForQuickReminder = null },
             onSave = { dueMillis, enabled, offsetDays, hour, minute ->
                 coroutineScope.launch {
@@ -1224,7 +1225,7 @@ private fun DebtOrReceivableCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "سررسید: ${PersianDateHelper.formatToPersianDate(debt.dueDateMillis)}",
+                                text = "سررسید: ${PersianDateHelper.formatToPersianDate(debt.dueDateMillis, currency.isEnglishDigits)}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = accentColor,
                                 fontWeight = FontWeight.Bold
@@ -1303,10 +1304,17 @@ private fun QuickRecordDebtPaymentDialog(
     onDismiss: () -> Unit,
     onConfirm: (amount: Long, accountId: Long?, note: String) -> Unit
 ) {
+    val context = LocalContext.current
     val isDebtSide = debt.type == DebtType.DEBT_I_OWE
-    var amountText by remember { mutableStateOf(remainingAmount.toString()) }
-    var selectedAccountId by remember { mutableStateOf<Long?>(accounts.firstOrNull()?.id) }
-    var note by remember { mutableStateOf("") }
+    val activeAccounts = remember(accounts) { accounts.filter { it.isActive }.ifEmpty { accounts } }
+    var amountText by remember(debt.id) { mutableStateOf(remainingAmount.toString()) }
+    var selectedAccountId by remember(debt.id, activeAccounts) {
+        mutableStateOf<Long?>(
+            debt.accountId?.takeIf { id -> activeAccounts.any { it.id == id } }
+                ?: activeAccounts.firstOrNull()?.id
+        )
+    }
+    var note by remember(debt.id) { mutableStateOf("") }
 
     GraphicalFormDialog(
         onDismissRequest = onDismiss,
@@ -1318,6 +1326,8 @@ private fun QuickRecordDebtPaymentDialog(
             val amt = PersianNumberFormatter.parseAmount(amountText)
             if (amt > 0L) {
                 onConfirm(amt, selectedAccountId, note.trim())
+            } else {
+                Toast.makeText(context, "لطفاً مبلغ معتبری وارد کنید", Toast.LENGTH_SHORT).show()
             }
         }
     ) {
@@ -1334,6 +1344,19 @@ private fun QuickRecordDebtPaymentDialog(
             currency = currency,
             label = if (isDebtSide) "مبلغ پرداخت‌شده" else "مبلغ دریافت‌شده"
         )
+
+        if (activeAccounts.isNotEmpty()) {
+            val selectedAccObj = activeAccounts.firstOrNull { it.id == selectedAccountId } ?: activeAccounts.first()
+            DodotaDropdownField(
+                label = if (isDebtSide) "حساب پرداخت‌کننده" else "حساب دریافت‌کننده",
+                selectedText = "${selectedAccObj.name} (${PersianNumberFormatter.formatCurrency(selectedAccObj.balance, currency)})",
+                items = activeAccounts,
+                itemText = { it.name },
+                itemSubtitle = { "موجودی: ${PersianNumberFormatter.formatCurrency(it.balance, currency)}" },
+                onItemSelected = { selectedAccountId = it.id },
+                leadingIcon = Icons.Default.CreditCard
+            )
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1385,6 +1408,7 @@ private fun AddOrEditDebtDialog(
         reminderMinute: Int
     ) -> Unit
 ) {
+    val context = LocalContext.current
     val isDebtSide = sideType == DebtType.DEBT_I_OWE
     val sideAccent = if (isDebtSide) DebtSideRedColor else ReceivableSideGreenColor
     var titleText by remember { mutableStateOf(existingDebt?.personOrCompanyName ?: "") }
@@ -1441,6 +1465,8 @@ private fun AddOrEditDebtDialog(
                     reminderHour,
                     reminderMinute
                 )
+            } else {
+                Toast.makeText(context, "لطفاً مبلغ معتبری وارد کنید", Toast.LENGTH_SHORT).show()
             }
         }
     ) {
@@ -1483,7 +1509,7 @@ private fun AddOrEditDebtDialog(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = if (dueDateMillis != null) {
-                    "تاریخ سررسید: ${PersianDateHelper.formatToPersianDate(dueDateMillis!!)}"
+                    "تاریخ سررسید: ${PersianDateHelper.formatToPersianDate(dueDateMillis!!, currency.isEnglishDigits)}"
                 } else {
                     "انتخاب تاریخ سررسید"
                 },
@@ -1540,6 +1566,7 @@ private fun QuickObligationReminderDialog(
     title: String,
     initialDueDateMillis: Long,
     existingReminder: ReminderEntity?,
+    currency: AppCurrency,
     onDismiss: () -> Unit,
     onSave: (dueMillis: Long, enabled: Boolean, offsetDays: Int, hour: Int, minute: Int) -> Unit
 ) {
@@ -1574,7 +1601,7 @@ private fun QuickObligationReminderDialog(
         ) {
             Icon(Icons.Outlined.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("تاریخ سررسید: ${PersianDateHelper.formatToPersianDate(dueDateMillis)}")
+            Text("تاریخ سررسید: ${PersianDateHelper.formatToPersianDate(dueDateMillis, currency.isEnglishDigits)}")
         }
 
         ReminderConfigSection(

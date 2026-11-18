@@ -74,6 +74,7 @@ fun FinancialCalendarScreen(
     debts: List<DebtEntity> = emptyList(),
     installmentPlans: List<InstallmentPlanEntity> = emptyList(),
     allInstallments: List<InstallmentEntity> = emptyList(),
+    accounts: List<AccountEntity> = emptyList(),
     onBack: () -> Unit
 ) {
     val currentPDate = remember { PersianDateHelper.getCurrentPersianDate() }
@@ -946,7 +947,7 @@ fun FinancialCalendarScreen(
                 val doc = DodotaPrintBuilders.buildCalendarDocument(
                     payload = payload,
                     transactions = transactions,
-                    accounts = emptyList(),
+                    accounts = accounts,
                     categories = categories,
                     debts = debts,
                     installmentPlans = installmentPlans,

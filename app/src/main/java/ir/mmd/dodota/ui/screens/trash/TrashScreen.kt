@@ -81,7 +81,7 @@ fun TrashScreen(
                     )
                 }
             } else {
-                items(trashList) { tx ->
+                items(trashList, key = { it.id }) { tx ->
                     val cat = tx.categoryId?.let { categoryMap[it] }
                     Card(
                         shape = RoundedCornerShape(16.dp),
@@ -108,7 +108,7 @@ fun TrashScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "${PersianNumberFormatter.formatCurrency(tx.amount, userPreferences.currency)} • ${PersianDateHelper.formatToPersianDate(tx.dateMillis)}",
+                                    text = "${PersianNumberFormatter.formatCurrency(tx.amount, userPreferences.currency)} • ${PersianDateHelper.formatToPersianDate(tx.dateMillis, userPreferences.currency.isEnglishDigits)}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.outline
                                 )

@@ -619,7 +619,7 @@ class BackupRepository(
         if (!obj.has(key) || obj.isNull(key)) return null
         val v = obj.opt(key) ?: return null
         val s = v.toString()
-        return if (s.isBlank() && obj.isNull(key)) null else s
+        return if (s.isBlank() || s.equals("null", ignoreCase = true)) null else s
     }
 
     private fun optSafeBoolean(obj: JSONObject, key: String, default: Boolean = false): Boolean {
@@ -1007,6 +1007,21 @@ class BackupRepository(
             val clean = jsonString.replace("\uFEFF", "").trim()
             if (clean.isBlank()) {
                 return@withContext Result.failure(IllegalArgumentException("فایل پشتیبان خالی است."))
+            }
+
+            val rootObj = try {
+                JSONObject(clean)
+            } catch (e: Exception) {
+                return@withContext Result.failure(IllegalArgumentException("فرمت فایل پشتیبان معتبر نیست: ${e.message}"))
+            }
+
+            val recognizedKeys = listOf(
+                "accounts", "categories", "transactions", "debts",
+                "installmentPlans", "plans", "recurringTransactions", "recurring",
+                "reminders", "budgets", "goals", "assets", "checklists", "chandRoozRecords"
+            )
+            if (recognizedKeys.none { rootObj.has(it) }) {
+                return@withContext Result.failure(IllegalArgumentException("فایل انتخاب‌شده ساختار معتبر پشتیبان دودوتا را ندارد."))
             }
 
             var payload: DodotaBackupPayload? = null

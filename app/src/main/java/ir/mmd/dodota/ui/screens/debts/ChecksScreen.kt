@@ -387,7 +387,7 @@ fun ChecksScreen(
                             ) {
                                 if (check.dueDateMillis != null) {
                                     Text(
-                                        text = "سررسید: ${PersianDateHelper.formatToPersianDate(check.dueDateMillis)}",
+                                        text = "سررسید: ${PersianDateHelper.formatToPersianDate(check.dueDateMillis, userPreferences.currency.isEnglishDigits)}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = accentColor,
                                         fontWeight = FontWeight.Bold
@@ -497,8 +497,15 @@ fun ChecksScreen(
 
     checkForQuickPay?.let { check ->
         val remaining = (check.totalAmount - check.paidAmount).coerceAtLeast(0L)
-        var amountText by remember { mutableStateOf(remaining.toString()) }
-        var note by remember { mutableStateOf("") }
+        val activeAccounts = remember(accounts) { accounts.filter { it.isActive }.ifEmpty { accounts } }
+        var amountText by remember(check.id) { mutableStateOf(remaining.toString()) }
+        var note by remember(check.id) { mutableStateOf("") }
+        var selectedAccId by remember(check.id, activeAccounts) {
+            mutableStateOf<Long?>(
+                check.accountId?.takeIf { id -> activeAccounts.any { it.id == id } }
+                    ?: activeAccounts.firstOrNull()?.id
+            )
+        }
         GraphicalFormDialog(
             onDismissRequest = { checkForQuickPay = null },
             title = "پاس شدن چک: ${check.personOrCompanyName}",
@@ -512,12 +519,14 @@ fun ChecksScreen(
                         repository.recordDebtPayment(
                             debt = check,
                             amount = amt,
-                            accountId = accounts.firstOrNull()?.id,
+                            accountId = selectedAccId,
                             notes = note.trim()
                         )
                         Toast.makeText(context, "پاس شدن چک ثبت شد ✓", Toast.LENGTH_SHORT).show()
                         checkForQuickPay = null
                     }
+                } else {
+                    Toast.makeText(context, "لطفاً مبلغ معتبری وارد کنید", Toast.LENGTH_SHORT).show()
                 }
             }
         ) {
@@ -527,6 +536,18 @@ fun ChecksScreen(
                 currency = userPreferences.currency,
                 label = "مبلغ پاس‌شده"
             )
+            if (activeAccounts.isNotEmpty()) {
+                val selectedAccObj = activeAccounts.firstOrNull { it.id == selectedAccId } ?: activeAccounts.first()
+                DodotaDropdownField(
+                    label = if (check.type == DebtType.DEBT_I_OWE) "حساب پرداخت‌کننده" else "حساب دریافت‌کننده",
+                    selectedText = "${selectedAccObj.name} (${PersianNumberFormatter.formatCurrency(selectedAccObj.balance, userPreferences.currency)})",
+                    items = activeAccounts,
+                    itemText = { it.name },
+                    itemSubtitle = { "موجودی: ${PersianNumberFormatter.formatCurrency(it.balance, userPreferences.currency)}" },
+                    onItemSelected = { selectedAccId = it.id },
+                    leadingIcon = Icons.Default.CreditCard
+                )
+            }
             DodotaTextField(
                 value = note,
                 onValueChange = { note = it },
@@ -618,6 +639,7 @@ private fun AddOrEditCheckDialog(
         minute: Int
     ) -> Unit
 ) {
+    val context = LocalContext.current
     val accentColor = MaterialTheme.colorScheme.primary
     var selectedType by remember { mutableStateOf(existingCheck?.type ?: DebtType.DEBT_I_OWE) }
     var checkNumber by remember { mutableStateOf(existingCheck?.checkNumber ?: "") }
@@ -663,6 +685,8 @@ private fun AddOrEditCheckDialog(
                     reminderHour,
                     reminderMinute
                 )
+            } else {
+                Toast.makeText(context, "لطفاً مبلغ معتبری وارد کنید", Toast.LENGTH_SHORT).show()
             }
         }
     ) {
@@ -723,7 +747,7 @@ private fun AddOrEditCheckDialog(
             Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "تاریخ سررسید چک: ${PersianDateHelper.formatToPersianDate(dueDateMillis ?: System.currentTimeMillis())}",
+                text = "تاریخ سررسید چک: ${PersianDateHelper.formatToPersianDate(dueDateMillis ?: System.currentTimeMillis(), currency.isEnglishDigits)}",
                 fontWeight = FontWeight.Bold,
                 color = accentColor
             )

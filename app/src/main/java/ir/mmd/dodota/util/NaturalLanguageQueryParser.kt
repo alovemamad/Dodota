@@ -30,6 +30,12 @@ object NaturalLanguageQueryParser {
         "زیر", "کمتر از", "کم تر از", "حداکثر", "تا", "<"
     )
 
+    private val BETWEEN_REGEX = Regex("""(?:بین|از)\s*(\d+(?:\.\d+)?)\s*(هزار|میلیون|میلیارد|تومان|تومن|ریال)?\s*(?:تا|الی)\s*(\d+(?:\.\d+)?)\s*(هزار|میلیون|میلیارد|تومان|تومن|ریال)?""")
+    private val ABOVE_REGEX = Regex("""(?:بالای|بیشتر\s*از|بیش\s*از|حداقل|>)\s*(\d+(?:\.\d+)?)\s*(هزار|میلیون|میلیارد|ملیون|تومان|تومن|ریال)?""")
+    private val BELOW_REGEX = Regex("""(?:زیر|کمتر\s*از|کم\s*تر\s*از|حداکثر|تا|<)\s*(\d+(?:\.\d+)?)\s*(هزار|میلیون|میلیارد|ملیون|تومان|تومن|ریال)?""")
+    private val STANDALONE_NUM_REGEX = Regex("""^(\d+(?:\.\d+)?)\s*(هزار|میلیون|میلیارد|ملیون)\s*(?:تومان|تومن|ریال)?$""")
+    private val WHITESPACE_REGEX = Regex("""\s+""")
+
     fun parse(rawQuery: String): ParsedTransactionQuery {
         val normalized = PersianNumberFormatter.toEnglishDigits(rawQuery)
             .replace("٬", "")
@@ -62,8 +68,7 @@ object NaturalLanguageQueryParser {
         var exactAmount: Long? = null
 
         // Regex for "بین X تا Y" or "از X تا Y"
-        val betweenRegex = Regex("""(?:بین|از)\s*(\d+(?:\.\d+)?)\s*(هزار|میلیون|میلیارد|تومان|تومن|ریال)?\s*(?:تا|الی)\s*(\d+(?:\.\d+)?)\s*(هزار|میلیون|میلیارد|تومان|تومن|ریال)?""")
-        val betweenMatch = betweenRegex.find(normalized)
+        val betweenMatch = BETWEEN_REGEX.find(normalized)
 
         var workingText = normalized
 
@@ -77,16 +82,14 @@ object NaturalLanguageQueryParser {
             workingText = workingText.removeRange(betweenMatch.range).trim()
         } else {
             // Check "بالای / بیشتر از / بیش از / حداقل X"
-            val aboveRegex = Regex("""(?:بالای|بیشتر\s*از|بیش\s*از|حداقل|>)\s*(\d+(?:\.\d+)?)\s*(هزار|میلیون|میلیارد|ملیون|تومان|تومن|ریال)?""")
-            val aboveMatch = aboveRegex.find(workingText)
+            val aboveMatch = ABOVE_REGEX.find(workingText)
             if (aboveMatch != null) {
                 minAmount = parseScaledNumber(aboveMatch.groupValues[1], aboveMatch.groupValues[2])
                 workingText = workingText.removeRange(aboveMatch.range).trim()
             }
 
             // Check "زیر / کمتر از / حداکثر / تا X"
-            val belowRegex = Regex("""(?:زیر|کمتر\s*از|کم\s*تر\s*از|حداکثر|تا|<)\s*(\d+(?:\.\d+)?)\s*(هزار|میلیون|میلیارد|ملیون|تومان|تومن|ریال)?""")
-            val belowMatch = belowRegex.find(workingText)
+            val belowMatch = BELOW_REGEX.find(workingText)
             if (belowMatch != null) {
                 maxAmount = parseScaledNumber(belowMatch.groupValues[1], belowMatch.groupValues[2])
                 workingText = workingText.removeRange(belowMatch.range).trim()
@@ -95,8 +98,7 @@ object NaturalLanguageQueryParser {
 
         // If no range keywords were used, check if there's a standalone scaled number like "500 هزار"
         if (minAmount == null && maxAmount == null) {
-            val standaloneNumRegex = Regex("""^(\d+(?:\.\d+)?)\s*(هزار|میلیون|میلیارد|ملیون)\s*(?:تومان|تومن|ریال)?$""")
-            val standaloneMatch = standaloneNumRegex.find(workingText)
+            val standaloneMatch = STANDALONE_NUM_REGEX.find(workingText)
             if (standaloneMatch != null) {
                 exactAmount = parseScaledNumber(standaloneMatch.groupValues[1], standaloneMatch.groupValues[2])
                 workingText = ""
@@ -104,7 +106,7 @@ object NaturalLanguageQueryParser {
         }
 
         val tokens = workingText
-            .split(Regex("""\s+"""))
+            .split(WHITESPACE_REGEX)
             .map { it.trim() }
             .filter { it.isNotEmpty() }
 
@@ -142,9 +144,15 @@ object NaturalLanguageQueryParser {
         rawQuery: String
     ): Boolean {
         if (rawQuery.isBlank()) return true
+        return matches(tx, category, accountName, parse(rawQuery))
+    }
 
-        val parsed = parse(rawQuery)
-
+    fun matches(
+        tx: TransactionEntity,
+        category: CategoryEntity?,
+        accountName: String?,
+        parsed: ParsedTransactionQuery
+    ): Boolean {
         if (parsed.forcedType != null && tx.type != parsed.forcedType) {
             return false
         }

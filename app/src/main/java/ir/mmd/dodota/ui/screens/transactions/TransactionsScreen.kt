@@ -81,7 +81,7 @@ fun TransactionsScreen(
 
     val filteredTransactions = remember(
         transactions,
-        searchQuery,
+        parsedNlpQuery,
         selectedTypeFilter,
         selectedAccountId,
         selectedCategoryId,
@@ -97,7 +97,7 @@ fun TransactionsScreen(
                 tx = tx,
                 category = cat,
                 accountName = acc?.name,
-                rawQuery = searchQuery
+                parsed = parsedNlpQuery
             )
 
             val matchesType = selectedTypeFilter == null || tx.type == selectedTypeFilter

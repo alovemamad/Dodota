@@ -889,6 +889,7 @@ fun DodotaApp(
                     debts = debts,
                     installmentPlans = installmentPlans,
                     allInstallments = allInstallments,
+                    accounts = accounts,
                     onBack = { navController.popBackStack() }
                 )
             }

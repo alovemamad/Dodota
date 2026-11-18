@@ -296,6 +296,7 @@ fun AddAssetDialog(
     onDismiss: () -> Unit,
     onSave: (name: String, type: AssetType, value: Long, notes: String) -> Unit
 ) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(AssetType.GOLD) }
     var valueText by remember { mutableStateOf("") }
@@ -353,8 +354,10 @@ fun AddAssetDialog(
             Button(
                 onClick = {
                     val value = PersianNumberFormatter.parseAmount(valueText)
-                    if (name.isNotBlank() && value > 0L) {
-                        onSave(name, selectedType, value, notes)
+                    when {
+                        name.isBlank() -> Toast.makeText(context, "لطفاً نام دارایی را وارد کنید", Toast.LENGTH_SHORT).show()
+                        value <= 0L -> Toast.makeText(context, "لطفاً ارزش معتبری وارد کنید", Toast.LENGTH_SHORT).show()
+                        else -> onSave(name.trim(), selectedType, value, notes)
                     }
                 }
             ) {
@@ -376,6 +379,7 @@ fun EditAssetDialog(
     onDismiss: () -> Unit,
     onSave: (newName: String, newType: AssetType, newValue: Long, newNotes: String) -> Unit
 ) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf(asset.name) }
     var selectedType by remember { mutableStateOf(asset.type) }
     var valueText by remember { mutableStateOf(asset.estimatedValue.toString()) }
@@ -433,8 +437,10 @@ fun EditAssetDialog(
             Button(
                 onClick = {
                     val value = PersianNumberFormatter.parseAmount(valueText)
-                    if (name.isNotBlank() && value > 0L) {
-                        onSave(name, selectedType, value, notes)
+                    when {
+                        name.isBlank() -> Toast.makeText(context, "لطفاً نام دارایی را وارد کنید", Toast.LENGTH_SHORT).show()
+                        value <= 0L -> Toast.makeText(context, "لطفاً ارزش معتبری وارد کنید", Toast.LENGTH_SHORT).show()
+                        else -> onSave(name.trim(), selectedType, value, notes)
                     }
                 }
             ) {
