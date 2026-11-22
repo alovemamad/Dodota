@@ -40,6 +40,7 @@ import ir.mmd.dodota.data.model.*
 import androidx.compose.ui.platform.LocalContext
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.ui.components.*
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.util.DodotaPrintBuilders
@@ -214,6 +215,7 @@ fun FinancialCalendarScreen(
         selectedDay == currentPDate.day
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             // Item 16 & 19: Clean title "تقویم مالی" without "(چک، قسط...)" and without "امروز" in topBar
@@ -233,7 +235,7 @@ fun FinancialCalendarScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 12.dp, bottom = 50.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)

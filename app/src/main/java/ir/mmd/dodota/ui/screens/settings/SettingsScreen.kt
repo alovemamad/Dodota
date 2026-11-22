@@ -36,11 +36,26 @@ import ir.mmd.dodota.BuildConfig
 import ir.mmd.dodota.data.model.AppCurrency
 import ir.mmd.dodota.data.model.AppFontFamilyOption
 import ir.mmd.dodota.data.model.AppFontSizePreset
+import ir.mmd.dodota.data.model.AppDesignMode
 import ir.mmd.dodota.data.model.AppThemeMode
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.preferences.UserPreferencesRepository
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.GlassCard
+import ir.mmd.dodota.ui.glass.DodotaDesignPicker
+import ir.mmd.dodota.ui.glass.Glass
+import ir.mmd.dodota.ui.glass.GlassAppearanceSection
+import ir.mmd.dodota.ui.glass.GlassBadge
+import ir.mmd.dodota.ui.glass.GlassGroup
+import ir.mmd.dodota.ui.glass.GlassLargeTitle
+import ir.mmd.dodota.ui.glass.GlassLookSection
+import ir.mmd.dodota.ui.glass.GlassPageBar
+import ir.mmd.dodota.ui.glass.GlassRow
+import ir.mmd.dodota.ui.glass.GlassSectionHeader
+import ir.mmd.dodota.ui.glass.GlassSwitchRow
+import ir.mmd.dodota.ui.glass.IosColors
+import ir.mmd.dodota.ui.glass.glassBottomExtraPadding
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.ui.theme.getDodotaFontFamily
 import ir.mmd.dodota.util.ApkDownloadState
@@ -71,8 +86,190 @@ fun SettingsScreen(
 
     val fontPercent = (userPreferences.fontScale * 100f).roundToInt()
     val fontSizePresetTitle = AppFontSizePreset.fromScale(userPreferences.fontScale).title
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val glassExtraBottom = glassBottomExtraPadding()
+    val effectiveBottomInset = if (glassExtraBottom > 0.dp) glassExtraBottom + navBottom else 0.dp
 
+    if (Glass.active) {
+        val c = Glass.colors
+        val updateSubtitle = if (userPreferences.lastUpdateCheckMillis > 0L) {
+            PersianNumberFormatter.formatDigits(
+                "نسخه ${BuildConfig.VERSION_NAME} • بررسی: ${PersianDateHelper.formatToPersianDate(userPreferences.lastUpdateCheckMillis)}",
+                userPreferences.currency
+            )
+        } else {
+            PersianNumberFormatter.formatDigits(
+                "نسخه ${BuildConfig.VERSION_NAME} • بررسی نسخه جدید",
+                userPreferences.currency
+            )
+        }
+        Scaffold(
+            containerColor = glassPageContainerColor(),
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        ) { paddingValues ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .background(glassPageContainerColor()),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp + effectiveBottomInset),
+            ) {
+                item {
+                    if (onBack != null) {
+                        GlassPageBar("تنظیمات و ظاهر", onBack = onBack)
+                    } else {
+                        Column(Modifier.fillMaxWidth().statusBarsPadding()) {
+                            GlassLargeTitle(
+                                text = "تنظیمات و ظاهر",
+                                modifier = Modifier.padding(top = 6.dp, bottom = 4.dp)
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    DodotaDesignPicker(
+                        selected = userPreferences.designMode,
+                        onSelect = { mode ->
+                            coroutineScope.launch {
+                                preferencesRepo.setDesignMode(mode)
+                            }
+                        }
+                    )
+                }
+
+                item {
+                    GlassAppearanceSection(
+                        prefs = userPreferences.glassPrefs,
+                        onUpdatePrefs = { transform ->
+                            coroutineScope.launch {
+                                preferencesRepo.updateGlassPrefs(transform)
+                            }
+                        }
+                    )
+                }
+
+                item {
+                    GlassLookSection(
+                        prefs = userPreferences.glassPrefs,
+                        onUpdatePrefs = { transform ->
+                            coroutineScope.launch {
+                                preferencesRepo.updateGlassPrefs(transform)
+                            }
+                        }
+                    )
+                }
+
+                item {
+                    GlassSectionHeader("تنظیمات مالی و متن")
+                    GlassGroup(inset = 58.dp) {
+                        GlassRow(
+                            title = "فونت و اندازه نوشته",
+                            value = "${userPreferences.fontFamily.title} (${PersianNumberFormatter.formatDigits(fontPercent, userPreferences.currency)}٪)",
+                            leading = {
+                                GlassBadge(IosColors.indigo(c.dark), icon = Icons.Outlined.FontDownload)
+                            },
+                            chevron = true,
+                            onClick = { showTypographyDialog = true },
+                            modifier = Modifier.testTag("settings_typography_card")
+                        )
+                        GlassRow(
+                            title = "واحد پول",
+                            value = userPreferences.currency.title,
+                            leading = {
+                                GlassBadge(IosColors.green(c.dark), icon = Icons.Outlined.Payments)
+                            },
+                            chevron = true,
+                            onClick = { showCurrencyDialog = true },
+                            modifier = Modifier.testTag("settings_currency_card")
+                        )
+                    }
+                }
+
+                item {
+                    GlassSectionHeader("امنیت و قابلیت‌های هوشمند")
+                    GlassGroup(inset = 58.dp) {
+                        GlassRow(
+                            title = "رمز عبور و اثر انگشت",
+                            value = if (userPreferences.isPinEnabled) "فعال" else "غیرفعال",
+                            leading = {
+                                GlassBadge(IosColors.orange(c.dark), icon = Icons.Outlined.Lock)
+                            },
+                            chevron = true,
+                            onClick = onNavigateToSecurity,
+                            modifier = Modifier.testTag("settings_security_card")
+                        )
+                        GlassSwitchRow(
+                            title = "چی‌چی پلاس",
+                            subtitle = "فعال‌سازی ماژول «چندروز؟» در داشبورد",
+                            checked = userPreferences.isChichiPlusEnabled,
+                            onCheckedChange = { isChecked ->
+                                coroutineScope.launch {
+                                    preferencesRepo.setChichiPlusEnabled(isChecked)
+                                }
+                            },
+                            leading = {
+                                GlassBadge(IosColors.purple(c.dark), icon = Icons.Outlined.DateRange)
+                            },
+                            modifier = Modifier.testTag("settings_chichi_plus_switch")
+                        )
+                    }
+                }
+
+                item {
+                    GlassSectionHeader("داده‌ها و نگهداری")
+                    GlassGroup(inset = 58.dp) {
+                        GlassRow(
+                            title = "پشتیبان‌گیری و بازیابی",
+                            leading = {
+                                GlassBadge(IosColors.blue(c.dark), icon = Icons.Outlined.Backup)
+                            },
+                            chevron = true,
+                            onClick = onNavigateToBackup,
+                            modifier = Modifier.testTag("settings_backup_card")
+                        )
+                        GlassRow(
+                            title = "سطل زباله",
+                            leading = {
+                                GlassBadge(IosColors.red(c.dark), icon = Icons.Outlined.Delete)
+                            },
+                            chevron = true,
+                            onClick = onNavigateToTrash,
+                            modifier = Modifier.testTag("settings_trash_card")
+                        )
+                    }
+                }
+
+                item {
+                    GlassSectionHeader("بروزرسانی و درباره دودوتا")
+                    GlassGroup(inset = 58.dp) {
+                        GlassRow(
+                            title = "بررسی بروزرسانی برنامه",
+                            subtitle = updateSubtitle,
+                            leading = {
+                                GlassBadge(IosColors.teal(c.dark), icon = Icons.Outlined.SystemUpdate)
+                            },
+                            chevron = true,
+                            onClick = { showGithubUpdateDialog = true },
+                            modifier = Modifier.testTag("settings_github_update_card")
+                        )
+                        GlassRow(
+                            title = "درباره «دودوتا»",
+                            value = PersianNumberFormatter.formatDigits("نسخه ${BuildConfig.VERSION_NAME}", userPreferences.currency),
+                            leading = {
+                                GlassBadge(IosColors.gray(c.dark), icon = Icons.Outlined.Info)
+                            },
+                            chevron = true,
+                            onClick = onNavigateToAbout,
+                            modifier = Modifier.testTag("settings_about_card")
+                        )
+                    }
+                }
+            }
+        }
+    } else {
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
@@ -85,11 +282,23 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 16.dp, bottom = 110.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Design Mode Picker (Classic vs Liquid Glass)
+            item {
+                DodotaDesignPicker(
+                    selected = userPreferences.designMode,
+                    onSelect = { mode ->
+                        coroutineScope.launch {
+                            preferencesRepo.setDesignMode(mode)
+                        }
+                    }
+                )
+            }
+
             // General & Appearance Settings Section
             item {
                 Text(
@@ -265,6 +474,7 @@ fun SettingsScreen(
                 )
             }
         }
+    }
     }
 
     if (showGithubUpdateDialog) {

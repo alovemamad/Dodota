@@ -38,6 +38,8 @@ import ir.mmd.dodota.ui.components.PrintDatePreset
 import ir.mmd.dodota.ui.components.PrintableSubSection
 import ir.mmd.dodota.ui.components.charts.*
 import ir.mmd.dodota.ui.components.parseHexColorCached
+import ir.mmd.dodota.ui.glass.glassBottomExtraPadding
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.ui.theme.TransferBlue
@@ -255,7 +257,12 @@ fun ReportsScreen(
         }
     }
 
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val glassExtraBottom = glassBottomExtraPadding()
+    val effectiveBottomInset = if (glassExtraBottom > 0.dp) glassExtraBottom + navBottom else 0.dp
+
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
@@ -274,9 +281,9 @@ fun ReportsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
                 .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 12.dp, bottom = 100.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 100.dp + effectiveBottomInset),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // 1. Timeframe Segmented Control

@@ -46,6 +46,7 @@ import ir.mmd.dodota.data.model.FinancialGoalEntity
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
 import ir.mmd.dodota.ui.components.*
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.ui.theme.TransferBlue
@@ -80,6 +81,7 @@ fun GoalsScreen(
     val completedCount = remember(goals) { goals.count { it.isCompleted || (it.targetAmount > 0 && it.currentAmount >= it.targetAmount) } }
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
@@ -108,7 +110,7 @@ fun GoalsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 12.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)

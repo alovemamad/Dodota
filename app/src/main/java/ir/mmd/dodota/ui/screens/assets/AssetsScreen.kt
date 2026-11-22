@@ -24,6 +24,7 @@ import ir.mmd.dodota.data.model.*
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
 import ir.mmd.dodota.ui.components.*
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.util.DodotaPrintBuilders
 import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
@@ -46,6 +47,7 @@ fun AssetsScreen(
     val totalAssetsValue = assets.sumOf { it.estimatedValue }
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
@@ -74,7 +76,7 @@ fun AssetsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 16.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)

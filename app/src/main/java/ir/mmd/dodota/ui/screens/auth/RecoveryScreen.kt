@@ -19,6 +19,7 @@ import ir.mmd.dodota.data.preferences.UserPreferencesRepository
 import ir.mmd.dodota.ui.components.DodotaTextField
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.GlassCard
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import kotlinx.coroutines.launch
 
 @Composable
@@ -33,6 +34,7 @@ fun RecoveryScreen(
     val context = LocalContext.current
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(

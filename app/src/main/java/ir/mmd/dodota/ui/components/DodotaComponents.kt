@@ -65,6 +65,13 @@ import androidx.compose.ui.window.DialogProperties
 import ir.mmd.dodota.data.model.AppCurrency
 import ir.mmd.dodota.data.model.AppThemeMode
 import ir.mmd.dodota.data.model.TransactionType
+import ir.mmd.dodota.ui.glass.Glass
+import ir.mmd.dodota.ui.glass.GlassCircleButton
+import ir.mmd.dodota.ui.glass.GlassIcons
+import ir.mmd.dodota.ui.glass.GlassType
+import ir.mmd.dodota.ui.glass.LocalGlassBackdrop
+import ir.mmd.dodota.ui.glass.LocalGlassTilt
+import ir.mmd.dodota.ui.glass.glassRimBrush
 import ir.mmd.dodota.ui.theme.*
 import ir.mmd.dodota.util.AlarmHelper
 import ir.mmd.dodota.util.PersianDateHelper
@@ -99,6 +106,58 @@ fun DodotaTopBar(
     onBackClick: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
+    if (Glass.active) {
+        val c = Glass.colors
+        val backdrop = LocalGlassBackdrop.current
+        val tilt = LocalGlassTilt.current
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(top = 6.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (onBackClick != null) {
+                    GlassCircleButton(
+                        icon = GlassIcons.ChevronLeft,
+                        label = "بازگشت",
+                        onClick = onBackClick,
+                        backdrop = backdrop,
+                        tilt = tilt,
+                        modifier = Modifier.testTag("top_bar_back_button")
+                    )
+                }
+                Text(
+                    text = title,
+                    style = GlassType.title2().copy(fontSize = 19.sp),
+                    color = c.label,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    content = actions
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(0.75.dp)
+                    .background(c.separator)
+            )
+        }
+        return
+    }
+
     val themeMode = LocalAppThemeMode.current
     val isVipRed = themeMode == AppThemeMode.VIP_RED
     val accentColor = if (isVipRed) VipRedPrimary else MaterialTheme.colorScheme.primary
@@ -208,6 +267,24 @@ fun GlassCard(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    if (Glass.active) {
+        val c = Glass.colors
+        val glassBorder = when {
+            borderColor != null -> BorderStroke(if (isHighlighted) 1.5.dp else 1.dp, borderColor.copy(alpha = if (isHighlighted) 0.75f else 0.45f))
+            c.translucent -> BorderStroke(1.dp, glassRimBrush(c))
+            else -> BorderStroke(0.5.dp, c.separator)
+        }
+        Card(
+            shape = shape,
+            colors = CardDefaults.cardColors(containerColor = c.cell),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            border = glassBorder,
+            modifier = if (onClick != null) modifier.clip(shape).clickable { onClick() } else modifier,
+            content = content
+        )
+        return
+    }
+
     val themeMode = LocalAppThemeMode.current
     val isGlassTheme = themeMode == AppThemeMode.VIP_RED ||
             themeMode == AppThemeMode.BLUBANK ||

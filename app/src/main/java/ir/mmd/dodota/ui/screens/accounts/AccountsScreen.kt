@@ -44,6 +44,7 @@ import ir.mmd.dodota.ui.components.GraphicalFormDialog
 import ir.mmd.dodota.ui.components.PersianAmountInput
 import ir.mmd.dodota.ui.components.PrintDatePreset
 import ir.mmd.dodota.ui.components.PrintableSubSection
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.util.DodotaPrintBuilders
 import ir.mmd.dodota.util.DodotaPrintHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
@@ -69,6 +70,7 @@ fun AccountsScreen(
     val totalBalance = activeAccounts.sumOf { it.balance }
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
@@ -104,7 +106,7 @@ fun AccountsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 16.dp, bottom = 110.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)

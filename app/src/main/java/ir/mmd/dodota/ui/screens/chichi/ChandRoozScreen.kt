@@ -44,6 +44,7 @@ import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.GlassCard
 import ir.mmd.dodota.ui.components.PrintDatePreset
 import ir.mmd.dodota.ui.components.PrintableSubSection
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.ui.theme.LocalDodotaGlassStyle
 import ir.mmd.dodota.util.DodotaPrintBuilders
 import ir.mmd.dodota.util.DodotaPrintHelper
@@ -100,6 +101,7 @@ fun ChandRoozScreen(
     }
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
@@ -134,7 +136,7 @@ fun ChandRoozScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)

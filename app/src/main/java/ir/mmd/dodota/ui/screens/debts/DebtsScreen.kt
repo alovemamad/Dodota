@@ -40,6 +40,8 @@ import ir.mmd.dodota.data.model.*
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
 import ir.mmd.dodota.ui.components.*
+import ir.mmd.dodota.ui.glass.glassBottomExtraPadding
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.util.AlarmHelper
@@ -153,7 +155,12 @@ fun DebtsScreen(
             )
     }
 
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val glassExtraBottom = glassBottomExtraPadding()
+    val effectiveBottomInset = if (glassExtraBottom > 0.dp) glassExtraBottom + navBottom else 0.dp
+
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
@@ -204,7 +211,9 @@ fun DebtsScreen(
                 containerColor = sideAccentColor,
                 contentColor = if (isDebtSide) Color.White else Color.Black,
                 shape = RoundedCornerShape(18.dp),
-                modifier = Modifier.testTag("add_debt_or_receivable_fab")
+                modifier = Modifier
+                    .padding(bottom = effectiveBottomInset)
+                    .testTag("add_debt_or_receivable_fab")
             ) {
                 Icon(
                     Icons.Default.Add,
@@ -217,9 +226,9 @@ fun DebtsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
                 .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 84.dp),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 84.dp + effectiveBottomInset),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // 1. Two-Sided Switcher: Only «بدهی» and «طلب» (Item 8)

@@ -42,6 +42,7 @@ import ir.mmd.dodota.data.repository.DodotaRepository
 import ir.mmd.dodota.ui.components.DodotaTextField
 import ir.mmd.dodota.ui.components.GlassCard
 import ir.mmd.dodota.ui.components.PersianAmountInput
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.util.PersianNumberFormatter
 import ir.mmd.dodota.util.SecurityHelper
 import kotlinx.coroutines.launch
@@ -110,7 +111,7 @@ fun OnboardingScreen(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets.safeDrawing
     ) { innerPadding ->
         Column(

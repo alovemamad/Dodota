@@ -20,6 +20,7 @@ import ir.mmd.dodota.data.preferences.UserPreferencesRepository
 import ir.mmd.dodota.data.repository.BackupRepository
 import ir.mmd.dodota.data.repository.DodotaRepository
 import ir.mmd.dodota.ui.DodotaApp
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.ui.theme.DodotaTheme
 import ir.mmd.dodota.util.AlarmHelper
 import ir.mmd.dodota.util.AlarmSoundManager
@@ -59,7 +60,7 @@ class MainActivity : FragmentActivity() {
                 DodotaTheme(userPreferences = userPreferences) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.background
+                        color = glassPageContainerColor()
                     ) {
                         DodotaApp(
                             repository = repository,

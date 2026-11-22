@@ -2,6 +2,7 @@ package ir.mmd.dodota.ui
 
 import android.content.pm.PackageManager
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -12,7 +13,13 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalLayoutDirection
+import com.kyant.backdrop.backdrops.layerBackdrop
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,6 +53,20 @@ import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.preferences.UserPreferencesRepository
 import ir.mmd.dodota.data.repository.BackupRepository
 import ir.mmd.dodota.data.repository.DodotaRepository
+import ir.mmd.dodota.ui.glass.Glass
+import ir.mmd.dodota.ui.glass.GlassSearchState
+import ir.mmd.dodota.ui.glass.GlassTabBar
+import ir.mmd.dodota.ui.glass.GlassTabBarHeight
+import ir.mmd.dodota.ui.glass.GlassTabBarMargin
+import ir.mmd.dodota.ui.glass.GlassTopEdge
+import ir.mmd.dodota.ui.glass.GlassWallpaperLayer
+import ir.mmd.dodota.ui.glass.LocalGlassBackdrop
+import ir.mmd.dodota.ui.glass.LocalGlassBottomPadding
+import ir.mmd.dodota.ui.glass.LocalGlassSearch
+import ir.mmd.dodota.ui.glass.LocalGlassTilt
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
+import ir.mmd.dodota.ui.glass.rememberGlassChrome
+import ir.mmd.dodota.ui.glass.rememberGlassTilt
 import ir.mmd.dodota.ui.navigation.BottomNavItem
 import ir.mmd.dodota.ui.navigation.Screen
 import ir.mmd.dodota.ui.screens.accounts.AccountDetailScreen
@@ -423,114 +444,180 @@ fun DodotaApp(
     }
 
     val showBottomBar = currentRoute in BOTTOM_BAR_ROUTES
+    val glassActive = Glass.active
+    val glassPrefs = Glass.prefs
+    val glassChrome = rememberGlassChrome()
+    val glassTilt = rememberGlassTilt(enabled = glassActive && glassPrefs.motionHighlights && !glassPrefs.reduceTransparency)
+    val glassSearch = remember { GlassSearchState() }
+    var glassMini by remember { mutableStateOf(false) }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = WindowInsets.safeDrawing,
-        bottomBar = {
-            AnimatedVisibility(
-                visible = showBottomBar,
-                enter = slideInVertically(
-                    initialOffsetY = { it },
-                    animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
-                ) + fadeIn(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)),
-                exit = slideOutVertically(
-                    targetOffsetY = { it },
-                    animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
-                ) + fadeOut(animationSpec = tween(durationMillis = 150))
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(26.dp))
-                        .border(
-                            BorderStroke(1.dp, glassStyle.cardBorderColor),
-                            RoundedCornerShape(26.dp)
-                        ),
-                    color = glassStyle.cardContainerColor,
-                    tonalElevation = 0.dp,
-                    shadowElevation = 8.dp
-                ) {
-                    NavigationBar(
-                        containerColor = Color.Transparent,
-                        tonalElevation = 0.dp,
-                        windowInsets = WindowInsets(0, 0, 0, 0)
-                    ) {
-                        BottomNavItem.entries.forEach { item ->
-                            val isSelected = currentRoute == item.route
-                            val iconScale by animateFloatAsState(
-                                targetValue = if (isSelected) 1.18f else 1.0f,
-                                animationSpec = spring(dampingRatio = 0.55f, stiffness = 420f),
-                                label = "nav_icon_scale"
-                            )
-                            NavigationBarItem(
-                                selected = isSelected,
-                                onClick = {
-                                    if (currentRoute != item.route) {
-                                        navController.navigate(item.route) {
-                                            popUpTo(Screen.Home.route)
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
+    LaunchedEffect(currentRoute) {
+        glassMini = false
+        if (currentRoute != Screen.Transactions.route && glassSearch.active) {
+            glassSearch.close()
+        }
+    }
+
+    BackHandler(enabled = glassActive && glassSearch.active) {
+        glassSearch.close()
+    }
+
+    val glassScroll = remember(glassActive, glassPrefs.shrinkTabBar) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (!glassActive || !glassPrefs.shrinkTabBar) return Offset.Zero
+                if (available.y < -12f) {
+                    glassMini = true
+                } else if (available.y > 12f) {
+                    glassMini = false
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    val bottomBarExtraPad = if (glassActive && showBottomBar) GlassTabBarHeight + GlassTabBarMargin + 12.dp else 0.dp
+    val layoutDir = LocalLayoutDirection.current
+
+    CompositionLocalProvider(
+        LocalGlassSearch provides glassSearch,
+        LocalGlassBackdrop provides (if (glassActive) glassChrome.wall else null),
+        LocalGlassTilt provides glassTilt,
+        LocalGlassBottomPadding provides bottomBarExtraPad,
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            if (glassActive) {
+                GlassWallpaperLayer(backdrop = glassChrome.wall, modifier = Modifier.fillMaxSize())
+            }
+
+            Scaffold(
+                containerColor = glassPageContainerColor(),
+                contentWindowInsets = WindowInsets.safeDrawing,
+                bottomBar = {
+                    if (!glassActive) {
+                        AnimatedVisibility(
+                            visible = showBottomBar,
+                            enter = slideInVertically(
+                                initialOffsetY = { it },
+                                animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
+                            ) + fadeIn(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)),
+                            exit = slideOutVertically(
+                                targetOffsetY = { it },
+                                animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
+                            ) + fadeOut(animationSpec = tween(durationMillis = 150))
+                        ) {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .navigationBarsPadding()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                                    .clip(RoundedCornerShape(26.dp))
+                                    .border(
+                                        BorderStroke(1.dp, glassStyle.cardBorderColor),
+                                        RoundedCornerShape(26.dp)
+                                    ),
+                                color = glassStyle.cardContainerColor,
+                                tonalElevation = 0.dp,
+                                shadowElevation = 8.dp
+                            ) {
+                                NavigationBar(
+                                    containerColor = Color.Transparent,
+                                    tonalElevation = 0.dp,
+                                    windowInsets = WindowInsets(0, 0, 0, 0)
+                                ) {
+                                    BottomNavItem.entries.forEach { item ->
+                                        val isSelected = currentRoute == item.route
+                                        val iconScale by animateFloatAsState(
+                                            targetValue = if (isSelected) 1.18f else 1.0f,
+                                            animationSpec = spring(dampingRatio = 0.55f, stiffness = 420f),
+                                            label = "nav_icon_scale"
+                                        )
+                                        NavigationBarItem(
+                                            selected = isSelected,
+                                            onClick = {
+                                                if (currentRoute != item.route) {
+                                                    navController.navigate(item.route) {
+                                                        popUpTo(Screen.Home.route)
+                                                        launchSingleTop = true
+                                                        restoreState = true
+                                                    }
+                                                }
+                                            },
+                                            icon = {
+                                                Icon(
+                                                    imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
+                                                    contentDescription = item.title,
+                                                    modifier = Modifier.graphicsLayer {
+                                                        scaleX = iconScale
+                                                        scaleY = iconScale
+                                                    }
+                                                )
+                                            },
+                                            label = {
+                                                Text(
+                                                    text = item.title,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                                    maxLines = 1
+                                                )
+                                            },
+                                            colors = NavigationBarItemDefaults.colors(
+                                                selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                                indicatorColor = MaterialTheme.colorScheme.primary,
+                                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        )
                                     }
-                                },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
-                                        contentDescription = item.title,
-                                        modifier = Modifier.graphicsLayer {
-                                            scaleX = iconScale
-                                            scaleY = iconScale
-                                        }
-                                    )
-                                },
-                                label = {
-                                    Text(
-                                        text = item.title,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                        maxLines = 1
-                                    )
-                                },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = MaterialTheme.colorScheme.onPrimary,
-                                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                                    indicatorColor = MaterialTheme.colorScheme.primary,
-                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            )
+                                }
+                            }
                         }
                     }
                 }
-            }
-        }
-    ) { paddingValues ->
-        NavHost(
-            navController = navController,
-            startDestination = Screen.Splash.route,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .consumeWindowInsets(paddingValues)
-                .imePadding(),
-            enterTransition = {
-                fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
-                scaleIn(initialScale = 0.97f, animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
-            },
-            exitTransition = {
-                fadeOut(animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing))
-            },
-            popEnterTransition = {
-                fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
-                scaleIn(initialScale = 0.97f, animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
-            },
-            popExitTransition = {
-                fadeOut(animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing))
-            }
-        ) {
+            ) { paddingValues ->
+                val navPadding = if (glassActive && showBottomBar) {
+                    PaddingValues(
+                        top = paddingValues.calculateTopPadding(),
+                        start = paddingValues.calculateStartPadding(layoutDir),
+                        end = paddingValues.calculateEndPadding(layoutDir),
+                        bottom = 0.dp
+                    )
+                } else {
+                    paddingValues
+                }
+                NavHost(
+                    navController = navController,
+                    startDestination = Screen.Splash.route,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(navPadding)
+                        .consumeWindowInsets(navPadding)
+                        .imePadding()
+                        .then(
+                            if (glassActive) {
+                                Modifier
+                                    .nestedScroll(glassScroll)
+                                    .layerBackdrop(glassChrome.page)
+                            } else {
+                                Modifier
+                            }
+                        ),
+                    enterTransition = {
+                        fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
+                        scaleIn(initialScale = 0.97f, animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
+                    },
+                    exitTransition = {
+                        fadeOut(animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing))
+                    },
+                    popEnterTransition = {
+                        fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
+                        scaleIn(initialScale = 0.97f, animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
+                    },
+                    popExitTransition = {
+                        fadeOut(animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing))
+                    }
+                ) {
             composable(Screen.Splash.route) {
                 SplashScreen(
                     userPreferences = userPreferences,
@@ -975,6 +1062,61 @@ fun DodotaApp(
             composable(Screen.About.route) {
                 AboutScreen(
                     onBack = { navController.popBackStack() }
+                )
+            }
+        }
+            }
+
+            if (glassActive) {
+                GlassTopEdge(
+                    backdrop = glassChrome.combined,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
+            }
+
+            AnimatedVisibility(
+                visible = glassActive && showBottomBar,
+                enter = slideInVertically(
+                    initialOffsetY = { it },
+                    animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
+                ) + fadeIn(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)),
+                exit = slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
+                ) + fadeOut(animationSpec = tween(durationMillis = 150)),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
+                val activeTab = BottomNavItem.entries.firstOrNull { it.route == currentRoute } ?: BottomNavItem.HOME
+                GlassTabBar(
+                    tabs = BottomNavItem.entries,
+                    current = activeTab,
+                    onSelect = { item ->
+                        glassMini = false
+                        if (glassSearch.active) glassSearch.close()
+                        if (currentRoute != item.route) {
+                            navController.navigate(item.route) {
+                                popUpTo(Screen.Home.route)
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    },
+                    backdrop = glassChrome.combined,
+                    minimized = glassMini,
+                    onExpand = { glassMini = false },
+                    search = glassSearch,
+                    onOpenSearch = {
+                        glassMini = false
+                        glassSearch.active = true
+                        if (currentRoute != Screen.Transactions.route) {
+                            navController.navigate(Screen.Transactions.route) {
+                                popUpTo(Screen.Home.route)
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    },
+                    tilt = glassTilt
                 )
             }
         }

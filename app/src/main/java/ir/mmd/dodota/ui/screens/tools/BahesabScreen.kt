@@ -31,6 +31,7 @@ import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.GlassCard
 import ir.mmd.dodota.ui.components.GraphicalFormDialog
 import ir.mmd.dodota.ui.components.PersianAmountInput
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.ui.theme.LocalDodotaGlassStyle
 import ir.mmd.dodota.util.PersianNumberFormatter
@@ -479,7 +480,7 @@ fun BahesabScreen(
                 onBackClick = onBack
             )
         },
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
         LazyColumn(

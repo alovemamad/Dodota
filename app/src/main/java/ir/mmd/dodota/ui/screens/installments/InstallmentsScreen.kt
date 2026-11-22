@@ -52,6 +52,7 @@ import ir.mmd.dodota.data.model.ReminderTargetType
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
 import ir.mmd.dodota.ui.components.*
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.util.AlarmHelper
@@ -234,6 +235,7 @@ fun InstallmentsScreen(
     val accentLight = MaterialTheme.colorScheme.secondary
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
@@ -262,7 +264,7 @@ fun InstallmentsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 16.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)

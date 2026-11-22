@@ -116,3 +116,58 @@ enum class AppFontSizePreset(
     }
 }
 
+enum class AppDesignMode(val title: String, val subtitle: String) {
+    CLASSIC("کلاسیک دودوتا", "طراحی اختصاصی فعلی و تم‌های رنگی کلاسیک"),
+    LIQUID_GLASS("لیکوئید گلس", "شیشه زنده بازتاب‌دار، پس‌زمینه پویا و نوار شناور")
+}
+
+enum class GlassMaterial(val title: String) {
+    Clear("شفاف (Clear)"),
+    Tinted("مات رنگی (Tinted)")
+}
+
+enum class GlassAppearanceMode(val title: String) {
+    Automatic("خودکار سیستم"),
+    Light("روشن"),
+    Dark("تاریک")
+}
+
+enum class GlassWallpaper(val title: String) {
+    Live("زنده (مه)"),
+    Lagoon("تالاب آبی"),
+    Dusk("گرگ‌ومیش"),
+    Graphite("گرافیت"),
+    Plain("ساده")
+}
+
+enum class GlassTint(val title: String) {
+    Blue("آبی"),
+    Indigo("نیلی"),
+    Purple("بنفش"),
+    Pink("صورتی"),
+    Red("قرمز"),
+    Orange("نارنجی"),
+    Green("سبز"),
+    Mint("نعنایی"),
+    Teal("فیروزه‌ای"),
+    Cyan("آسمانی"),
+    Brown("قهوه‌ای"),
+    Graphite("طوسی")
+}
+
+data class GlassPrefs(
+    val material: GlassMaterial = GlassMaterial.Clear,
+    val appearance: GlassAppearanceMode = GlassAppearanceMode.Automatic,
+    val wallpaper: GlassWallpaper = GlassWallpaper.Live,
+    val tint: GlassTint = GlassTint.Blue,
+    val glassLists: Boolean = true,
+    val shrinkTabBar: Boolean = true,
+    val motionHighlights: Boolean = false,
+    val reduceTransparency: Boolean = false,
+    val homeGauges: Boolean = true,
+    val homeSparklines: Boolean = true,
+    val homeAccountsStrip: Boolean = true,
+    val homeToolsGrid: Boolean = true
+)
+
+

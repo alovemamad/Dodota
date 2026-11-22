@@ -38,6 +38,7 @@ import ir.mmd.dodota.data.model.*
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
 import ir.mmd.dodota.ui.components.*
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.ui.theme.WarningAmber
@@ -221,6 +222,7 @@ fun AddEditTransactionScreen(
     }
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
@@ -246,7 +248,7 @@ fun AddEditTransactionScreen(
                 .padding(paddingValues)
                 .imePadding()
                 .navigationBarsPadding()
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)

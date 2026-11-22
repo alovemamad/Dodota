@@ -39,6 +39,8 @@ import ir.mmd.dodota.ui.components.GlassCard
 import ir.mmd.dodota.ui.components.PrintDatePreset
 import ir.mmd.dodota.ui.components.PrintableSubSection
 import ir.mmd.dodota.ui.components.parseHexColorCached
+import ir.mmd.dodota.ui.glass.Glass
+import ir.mmd.dodota.ui.glass.GlassDodotaHome
 import ir.mmd.dodota.ui.theme.*
 import ir.mmd.dodota.util.DodotaPrintBuilders
 import ir.mmd.dodota.util.DodotaPrintHelper
@@ -110,6 +112,35 @@ fun HomeScreen(
         inc to exp
     }
 
+    if (Glass.active) {
+        GlassDodotaHome(
+            userPreferences = userPreferences,
+            activeAccounts = activeAccounts,
+            allTransactions = allTransactions,
+            totalBalance = totalBalance,
+            netWorth = netWorth,
+            currentMonthIncome = currentMonthIncome,
+            currentMonthExpense = currentMonthExpense,
+            formattedToday = formattedToday,
+            upcomingInstallmentCount = upcomingInstallments.size,
+            activeReminderCount = activeReminders.size,
+            onOpenPrintDialog = { showPrintDialog = true },
+            onNavigateToAddTransaction = onNavigateToAddTransaction,
+            onNavigateToAccounts = onNavigateToAccounts,
+            onNavigateToCardsManager = onNavigateToCardsManager,
+            onNavigateToInstallments = onNavigateToInstallments,
+            onNavigateToReminders = onNavigateToReminders,
+            onNavigateToBudgets = onNavigateToBudgets,
+            onNavigateToGoals = onNavigateToGoals,
+            onNavigateToAssets = onNavigateToAssets,
+            onNavigateToCalendar = onNavigateToCalendar,
+            onNavigateToChecklists = onNavigateToChecklists,
+            onNavigateToChecks = onNavigateToChecks,
+            onNavigateToBahesab = onNavigateToBahesab,
+            onNavigateToChandRooz = onNavigateToChandRooz,
+            onToggleBalanceVisibility = onToggleBalanceVisibility,
+        )
+    } else {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -738,6 +769,7 @@ fun HomeScreen(
                 }
             }
         }
+    }
     }
 
     if (showPrintDialog) {

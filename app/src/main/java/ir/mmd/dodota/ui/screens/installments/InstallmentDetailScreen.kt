@@ -48,6 +48,7 @@ import ir.mmd.dodota.ui.components.PersianAmountInput
 import ir.mmd.dodota.ui.components.PersianDatePickerDialog
 import ir.mmd.dodota.ui.components.PrintDatePreset
 import ir.mmd.dodota.ui.components.PrintableSubSection
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.util.AlarmHelper
@@ -89,6 +90,7 @@ fun InstallmentDetailScreen(
     val accentLight = MaterialTheme.colorScheme.secondary
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
@@ -165,7 +167,7 @@ fun InstallmentDetailScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .background(MaterialTheme.colorScheme.background)
+                    .background(glassPageContainerColor())
                     .padding(horizontal = 16.dp),
                 contentPadding = PaddingValues(top = 16.dp, bottom = 50.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)

@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -14,7 +15,15 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import ir.mmd.dodota.data.model.AppDesignMode
 import ir.mmd.dodota.data.model.AppThemeMode
+import ir.mmd.dodota.data.model.GlassAppearanceMode
+import ir.mmd.dodota.data.model.GlassPrefs
+import ir.mmd.dodota.ui.glass.GlassLook
+import ir.mmd.dodota.ui.glass.GlassPalette
+import ir.mmd.dodota.ui.glass.LocalAppDesignMode
+import ir.mmd.dodota.ui.glass.LocalGlassLook
+import ir.mmd.dodota.ui.glass.glassColorScheme
 
 // Standard Light
 private val StandardLightScheme = lightColorScheme(
@@ -249,6 +258,8 @@ fun DodotaTheme(
             fontFamily = userPreferences.fontFamily,
             fontScale = userPreferences.fontScale,
             darkTheme = darkTheme,
+            designMode = userPreferences.designMode,
+            glassPrefs = userPreferences.glassPrefs,
             content = content
         )
     }
@@ -260,9 +271,24 @@ fun DodotaTheme(
     fontFamily: ir.mmd.dodota.data.model.AppFontFamilyOption = ir.mmd.dodota.data.model.AppFontFamilyOption.VAZIRMATN,
     fontScale: Float = 1.0f,
     darkTheme: Boolean = isSystemInDarkTheme(),
+    designMode: AppDesignMode = AppDesignMode.CLASSIC,
+    glassPrefs: GlassPrefs = GlassPrefs(),
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when (themeMode) {
+    val isGlassMode = designMode == AppDesignMode.LIQUID_GLASS
+    val isGlassDark = when (glassPrefs.appearance) {
+        GlassAppearanceMode.Automatic -> darkTheme
+        GlassAppearanceMode.Light -> false
+        GlassAppearanceMode.Dark -> true
+    }
+    val glassColors = remember(isGlassDark, glassPrefs) {
+        GlassPalette.of(isGlassDark, glassPrefs)
+    }
+    val glassLook = remember(glassColors, glassPrefs) {
+        GlassLook(colors = glassColors, prefs = glassPrefs, latin = false)
+    }
+
+    val classicColorScheme = when (themeMode) {
         AppThemeMode.VIP_RED -> VipRedScheme
         AppThemeMode.SYSTEM -> if (darkTheme) StandardDarkScheme else StandardLightScheme
         AppThemeMode.LIGHT -> StandardLightScheme
@@ -275,24 +301,39 @@ fun DodotaTheme(
         AppThemeMode.BLACK -> BlackScheme
     }
 
-    val isGlass = themeMode != AppThemeMode.LIGHT && themeMode != AppThemeMode.SYSTEM
+    val colorScheme = if (isGlassMode) {
+        glassColorScheme(glassColors)
+    } else {
+        classicColorScheme
+    }
 
-    val glassStyle = DodotaGlassStyle(
-        isGlassEnabled = isGlass,
-        cardContainerColor = if (themeMode == AppThemeMode.VIP_RED) {
-            VipRedSurfaceVariant.copy(alpha = 0.85f)
-        } else {
-            colorScheme.surfaceVariant.copy(alpha = if (isGlass) 0.88f else 0.96f)
-        },
-        cardBorderColor = if (themeMode == AppThemeMode.VIP_RED) {
-            VipRedPrimary.copy(alpha = 0.35f)
-        } else {
-            colorScheme.primary.copy(alpha = 0.28f)
-        },
-        accentGlowColor = colorScheme.primary
-    )
+    val isClassicGlass = themeMode != AppThemeMode.LIGHT && themeMode != AppThemeMode.SYSTEM
 
-    val dynamicTypography = androidx.compose.runtime.remember(fontFamily, fontScale) {
+    val glassStyle = if (isGlassMode) {
+        DodotaGlassStyle(
+            isGlassEnabled = !glassPrefs.reduceTransparency,
+            cardContainerColor = glassColors.cell,
+            cardBorderColor = glassColors.separator,
+            accentGlowColor = glassColors.tint
+        )
+    } else {
+        DodotaGlassStyle(
+            isGlassEnabled = isClassicGlass,
+            cardContainerColor = if (themeMode == AppThemeMode.VIP_RED) {
+                VipRedSurfaceVariant.copy(alpha = 0.85f)
+            } else {
+                classicColorScheme.surfaceVariant.copy(alpha = if (isClassicGlass) 0.88f else 0.96f)
+            },
+            cardBorderColor = if (themeMode == AppThemeMode.VIP_RED) {
+                VipRedPrimary.copy(alpha = 0.35f)
+            } else {
+                classicColorScheme.primary.copy(alpha = 0.28f)
+            },
+            accentGlowColor = classicColorScheme.primary
+        )
+    }
+
+    val dynamicTypography = remember(fontFamily, fontScale) {
         createDodotaTypography(fontOption = fontFamily, fontScale = fontScale)
     }
 
@@ -301,13 +342,27 @@ fun DodotaTheme(
         SideEffect {
             val window = (view.context as? Activity)?.window
             if (window != null) {
-                window.statusBarColor = colorScheme.background.toArgb()
-                window.navigationBarColor = colorScheme.background.toArgb()
-                window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(colorScheme.background.toArgb()))
-                val isDark = when (themeMode) {
-                    AppThemeMode.LIGHT -> false
-                    AppThemeMode.SYSTEM -> darkTheme
-                    else -> true
+                if (isGlassMode) {
+                    window.statusBarColor = Color.Transparent.toArgb()
+                    window.navigationBarColor = Color.Transparent.toArgb()
+                    window.setBackgroundDrawable(
+                        android.graphics.drawable.ColorDrawable(
+                            GlassPalette.wallpaperTop(glassPrefs.wallpaper, isGlassDark).toArgb()
+                        )
+                    )
+                } else {
+                    window.statusBarColor = colorScheme.background.toArgb()
+                    window.navigationBarColor = colorScheme.background.toArgb()
+                    window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(colorScheme.background.toArgb()))
+                }
+                val isDark = if (isGlassMode) {
+                    isGlassDark
+                } else {
+                    when (themeMode) {
+                        AppThemeMode.LIGHT -> false
+                        AppThemeMode.SYSTEM -> darkTheme
+                        else -> true
+                    }
                 }
                 val insetsController = WindowCompat.getInsetsController(window, view)
                 insetsController.isAppearanceLightStatusBars = !isDark
@@ -321,13 +376,15 @@ fun DodotaTheme(
         typography = dynamicTypography,
         shapes = DodotaShapes
     ) {
-        // Enforce Persian RTL layout direction and provide current theme & typography state throughout the entire app
+        // Enforce Persian RTL layout direction and provide current theme, design mode & typography state throughout the entire app
         CompositionLocalProvider(
             LocalLayoutDirection provides LayoutDirection.Rtl,
             LocalAppThemeMode provides themeMode,
             LocalAppFontFamily provides fontFamily,
             LocalAppFontScale provides fontScale,
             LocalDodotaGlassStyle provides glassStyle,
+            LocalAppDesignMode provides designMode,
+            LocalGlassLook provides glassLook,
             LocalTextStyle provides dynamicTypography.bodyLarge
         ) {
             content()

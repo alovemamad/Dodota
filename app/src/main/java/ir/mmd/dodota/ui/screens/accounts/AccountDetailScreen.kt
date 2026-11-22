@@ -27,6 +27,7 @@ import ir.mmd.dodota.ui.components.EmptyStateCard
 import ir.mmd.dodota.ui.components.GlassCard
 import ir.mmd.dodota.ui.components.PrintDatePreset
 import ir.mmd.dodota.ui.components.PrintableSubSection
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.ui.theme.TransferBlue
@@ -58,6 +59,7 @@ fun AccountDetailScreen(
     val context = LocalContext.current
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
@@ -90,7 +92,7 @@ fun AccountDetailScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .background(MaterialTheme.colorScheme.background)
+                    .background(glassPageContainerColor())
                     .padding(horizontal = 16.dp),
                 contentPadding = PaddingValues(top = 16.dp, bottom = 80.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)

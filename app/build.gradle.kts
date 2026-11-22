@@ -97,6 +97,7 @@ dependencies {
   implementation(libs.androidx.compose.ui)
   implementation(libs.androidx.compose.ui.graphics)
   implementation(libs.androidx.compose.ui.tooling.preview)
+  implementation(libs.backdrop)
   // implementation(libs.androidx.compose.ui.text.google.fonts)
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.datastore.preferences)

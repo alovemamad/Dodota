@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import ir.mmd.dodota.data.preferences.UserPreferences
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.util.PersianNumberFormatter
 import ir.mmd.dodota.util.SecurityHelper
 
@@ -105,7 +106,7 @@ fun LockScreen(
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+        color = glassPageContainerColor()
     ) {
         Column(
             modifier = Modifier

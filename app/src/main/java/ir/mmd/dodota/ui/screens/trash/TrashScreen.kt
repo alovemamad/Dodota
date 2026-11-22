@@ -24,6 +24,7 @@ import ir.mmd.dodota.data.repository.DodotaRepository
 import ir.mmd.dodota.ui.components.CategoryIconView
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.EmptyStateCard
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.util.PersianDateHelper
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
@@ -44,6 +45,7 @@ fun TrashScreen(
     var showEmptyTrashConfirm by remember { mutableStateOf(false) }
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
@@ -67,7 +69,7 @@ fun TrashScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 16.dp, bottom = 56.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)

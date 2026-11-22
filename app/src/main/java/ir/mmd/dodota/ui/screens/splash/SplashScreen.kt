@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ir.mmd.dodota.R
 import ir.mmd.dodota.data.preferences.UserPreferences
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -68,7 +69,7 @@ fun SplashScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(glassPageContainerColor()),
         contentAlignment = Alignment.Center
     ) {
         Column(

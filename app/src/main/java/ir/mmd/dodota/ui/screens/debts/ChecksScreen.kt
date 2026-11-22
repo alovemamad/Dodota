@@ -37,6 +37,7 @@ import ir.mmd.dodota.data.model.*
 import ir.mmd.dodota.data.preferences.UserPreferences
 import ir.mmd.dodota.data.repository.DodotaRepository
 import ir.mmd.dodota.ui.components.*
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.util.AlarmHelper
 import ir.mmd.dodota.util.DodotaPrintBuilders
@@ -88,6 +89,7 @@ fun ChecksScreen(
     val percentPaid = (progress * 100).toInt()
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
@@ -119,7 +121,7 @@ fun ChecksScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 12.dp, bottom = 100.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)

@@ -58,6 +58,7 @@ import ir.mmd.dodota.ui.components.GlassCard
 import ir.mmd.dodota.ui.components.GraphicalFormDialog
 import ir.mmd.dodota.ui.components.PersianAmountInput
 import ir.mmd.dodota.ui.components.PrintableSubSection
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.util.DodotaPrintBuilders
@@ -125,6 +126,7 @@ fun ChecklistsScreen(
     }
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
@@ -154,7 +156,7 @@ fun ChecklistsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .imePadding()
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 12.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)

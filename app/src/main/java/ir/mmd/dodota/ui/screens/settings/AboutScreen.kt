@@ -17,6 +17,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import ir.mmd.dodota.BuildConfig
 import ir.mmd.dodota.ui.components.DodotaTopBar
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.util.PersianNumberFormatter
 import ir.mmd.dodota.util.TelegramHelper
 
@@ -27,6 +28,7 @@ fun AboutScreen(
     val context = LocalContext.current
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
@@ -39,7 +41,7 @@ fun AboutScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 16.dp, bottom = 56.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),

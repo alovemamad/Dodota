@@ -24,6 +24,7 @@ import ir.mmd.dodota.data.preferences.UserPreferencesRepository
 import ir.mmd.dodota.ui.components.DodotaTextField
 import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.FeatureToggleCard
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.util.PersianNumberFormatter
 import ir.mmd.dodota.util.SecurityHelper
 import kotlinx.coroutines.launch
@@ -41,6 +42,7 @@ fun SecuritySettingsScreen(
     var generatedRecoveryCode by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             DodotaTopBar(
@@ -53,7 +55,7 @@ fun SecuritySettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 16.dp, bottom = 56.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)

@@ -5,8 +5,14 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import ir.mmd.dodota.data.model.AppCurrency
+import ir.mmd.dodota.data.model.AppDesignMode
 import ir.mmd.dodota.data.model.AppFontFamilyOption
 import ir.mmd.dodota.data.model.AppThemeMode
+import ir.mmd.dodota.data.model.GlassAppearanceMode
+import ir.mmd.dodota.data.model.GlassMaterial
+import ir.mmd.dodota.data.model.GlassPrefs
+import ir.mmd.dodota.data.model.GlassTint
+import ir.mmd.dodota.data.model.GlassWallpaper
 import ir.mmd.dodota.util.SecurityHelper
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -33,7 +39,9 @@ data class UserPreferences(
     val isChichiPlusEnabled: Boolean = false,
     val githubRepoSlug: String = "",
     val lastUpdateCheckMillis: Long = 0L,
-    val latestKnownVersion: String = ""
+    val latestKnownVersion: String = "",
+    val designMode: AppDesignMode = AppDesignMode.CLASSIC,
+    val glassPrefs: GlassPrefs = GlassPrefs()
 ) {
     val isPinEnabled: Boolean get() = isAppLockEnabled && pinHash.isNotBlank()
     val colorTheme: AppThemeMode get() = themeMode
@@ -61,6 +69,19 @@ class UserPreferencesRepository(private val context: Context) {
         val GITHUB_REPO_SLUG = stringPreferencesKey("github_repo_slug")
         val LAST_UPDATE_CHECK_MILLIS = longPreferencesKey("last_update_check_millis")
         val LATEST_KNOWN_VERSION = stringPreferencesKey("latest_known_version")
+        val DESIGN_MODE = stringPreferencesKey("app_design_mode")
+        val GLASS_MATERIAL = stringPreferencesKey("glass_material")
+        val GLASS_APPEARANCE = stringPreferencesKey("glass_appearance")
+        val GLASS_WALLPAPER = stringPreferencesKey("glass_wallpaper")
+        val GLASS_TINT = stringPreferencesKey("glass_tint")
+        val GLASS_LISTS = booleanPreferencesKey("glass_lists")
+        val GLASS_SHRINK_TAB_BAR = booleanPreferencesKey("glass_shrink_tab_bar")
+        val GLASS_MOTION_HIGHLIGHTS = booleanPreferencesKey("glass_motion_highlights")
+        val GLASS_REDUCE_TRANSPARENCY = booleanPreferencesKey("glass_reduce_transparency")
+        val GLASS_HOME_GAUGES = booleanPreferencesKey("glass_home_gauges")
+        val GLASS_HOME_SPARKLINES = booleanPreferencesKey("glass_home_sparklines")
+        val GLASS_HOME_ACCOUNTS_STRIP = booleanPreferencesKey("glass_home_accounts_strip")
+        val GLASS_HOME_TOOLS_GRID = booleanPreferencesKey("glass_home_tools_grid")
     }
 
     val userPreferencesFlow: Flow<UserPreferences> = dataStore.data
@@ -90,6 +111,39 @@ class UserPreferencesRepository(private val context: Context) {
                 AppFontFamilyOption.VAZIRMATN
             }
 
+            val designMode = try {
+                AppDesignMode.valueOf(preferences[PreferencesKeys.DESIGN_MODE] ?: AppDesignMode.CLASSIC.name)
+            } catch (_: Exception) {
+                AppDesignMode.CLASSIC
+            }
+            val glassMaterial = try {
+                GlassMaterial.valueOf(preferences[PreferencesKeys.GLASS_MATERIAL] ?: GlassMaterial.Clear.name)
+            } catch (_: Exception) { GlassMaterial.Clear }
+            val glassAppearance = try {
+                GlassAppearanceMode.valueOf(preferences[PreferencesKeys.GLASS_APPEARANCE] ?: GlassAppearanceMode.Automatic.name)
+            } catch (_: Exception) { GlassAppearanceMode.Automatic }
+            val glassWallpaper = try {
+                GlassWallpaper.valueOf(preferences[PreferencesKeys.GLASS_WALLPAPER] ?: GlassWallpaper.Live.name)
+            } catch (_: Exception) { GlassWallpaper.Live }
+            val glassTint = try {
+                GlassTint.valueOf(preferences[PreferencesKeys.GLASS_TINT] ?: GlassTint.Blue.name)
+            } catch (_: Exception) { GlassTint.Blue }
+
+            val glassPrefs = GlassPrefs(
+                material = glassMaterial,
+                appearance = glassAppearance,
+                wallpaper = glassWallpaper,
+                tint = glassTint,
+                glassLists = preferences[PreferencesKeys.GLASS_LISTS] ?: true,
+                shrinkTabBar = preferences[PreferencesKeys.GLASS_SHRINK_TAB_BAR] ?: true,
+                motionHighlights = preferences[PreferencesKeys.GLASS_MOTION_HIGHLIGHTS] ?: false,
+                reduceTransparency = preferences[PreferencesKeys.GLASS_REDUCE_TRANSPARENCY] ?: false,
+                homeGauges = preferences[PreferencesKeys.GLASS_HOME_GAUGES] ?: true,
+                homeSparklines = preferences[PreferencesKeys.GLASS_HOME_SPARKLINES] ?: true,
+                homeAccountsStrip = preferences[PreferencesKeys.GLASS_HOME_ACCOUNTS_STRIP] ?: true,
+                homeToolsGrid = preferences[PreferencesKeys.GLASS_HOME_TOOLS_GRID] ?: true
+            )
+
             UserPreferences(
                 currency = currency,
                 themeMode = theme,
@@ -107,7 +161,9 @@ class UserPreferencesRepository(private val context: Context) {
                 isChichiPlusEnabled = preferences[PreferencesKeys.IS_CHICHI_PLUS_ENABLED] ?: false,
                 githubRepoSlug = preferences[PreferencesKeys.GITHUB_REPO_SLUG] ?: "",
                 lastUpdateCheckMillis = preferences[PreferencesKeys.LAST_UPDATE_CHECK_MILLIS] ?: 0L,
-                latestKnownVersion = preferences[PreferencesKeys.LATEST_KNOWN_VERSION] ?: ""
+                latestKnownVersion = preferences[PreferencesKeys.LATEST_KNOWN_VERSION] ?: "",
+                designMode = designMode,
+                glassPrefs = glassPrefs
             )
         }
         .distinctUntilChanged()
@@ -239,6 +295,44 @@ class UserPreferencesRepository(private val context: Context) {
     suspend fun setOnboardingCompleted(completed: Boolean) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.IS_ONBOARDING_COMPLETED] = completed
+        }
+    }
+
+    suspend fun setDesignMode(mode: AppDesignMode) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.DESIGN_MODE] = mode.name
+        }
+    }
+
+    suspend fun updateGlassPrefs(transform: (GlassPrefs) -> GlassPrefs) {
+        dataStore.edit { preferences ->
+            val current = GlassPrefs(
+                material = try { GlassMaterial.valueOf(preferences[PreferencesKeys.GLASS_MATERIAL] ?: GlassMaterial.Clear.name) } catch (_: Exception) { GlassMaterial.Clear },
+                appearance = try { GlassAppearanceMode.valueOf(preferences[PreferencesKeys.GLASS_APPEARANCE] ?: GlassAppearanceMode.Automatic.name) } catch (_: Exception) { GlassAppearanceMode.Automatic },
+                wallpaper = try { GlassWallpaper.valueOf(preferences[PreferencesKeys.GLASS_WALLPAPER] ?: GlassWallpaper.Live.name) } catch (_: Exception) { GlassWallpaper.Live },
+                tint = try { GlassTint.valueOf(preferences[PreferencesKeys.GLASS_TINT] ?: GlassTint.Blue.name) } catch (_: Exception) { GlassTint.Blue },
+                glassLists = preferences[PreferencesKeys.GLASS_LISTS] ?: true,
+                shrinkTabBar = preferences[PreferencesKeys.GLASS_SHRINK_TAB_BAR] ?: true,
+                motionHighlights = preferences[PreferencesKeys.GLASS_MOTION_HIGHLIGHTS] ?: false,
+                reduceTransparency = preferences[PreferencesKeys.GLASS_REDUCE_TRANSPARENCY] ?: false,
+                homeGauges = preferences[PreferencesKeys.GLASS_HOME_GAUGES] ?: true,
+                homeSparklines = preferences[PreferencesKeys.GLASS_HOME_SPARKLINES] ?: true,
+                homeAccountsStrip = preferences[PreferencesKeys.GLASS_HOME_ACCOUNTS_STRIP] ?: true,
+                homeToolsGrid = preferences[PreferencesKeys.GLASS_HOME_TOOLS_GRID] ?: true
+            )
+            val next = transform(current)
+            preferences[PreferencesKeys.GLASS_MATERIAL] = next.material.name
+            preferences[PreferencesKeys.GLASS_APPEARANCE] = next.appearance.name
+            preferences[PreferencesKeys.GLASS_WALLPAPER] = next.wallpaper.name
+            preferences[PreferencesKeys.GLASS_TINT] = next.tint.name
+            preferences[PreferencesKeys.GLASS_LISTS] = next.glassLists
+            preferences[PreferencesKeys.GLASS_SHRINK_TAB_BAR] = next.shrinkTabBar
+            preferences[PreferencesKeys.GLASS_MOTION_HIGHLIGHTS] = next.motionHighlights
+            preferences[PreferencesKeys.GLASS_REDUCE_TRANSPARENCY] = next.reduceTransparency
+            preferences[PreferencesKeys.GLASS_HOME_GAUGES] = next.homeGauges
+            preferences[PreferencesKeys.GLASS_HOME_SPARKLINES] = next.homeSparklines
+            preferences[PreferencesKeys.GLASS_HOME_ACCOUNTS_STRIP] = next.homeAccountsStrip
+            preferences[PreferencesKeys.GLASS_HOME_TOOLS_GRID] = next.homeToolsGrid
         }
     }
 

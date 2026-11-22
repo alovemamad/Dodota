@@ -55,6 +55,7 @@ import ir.mmd.dodota.ui.components.DodotaTopBar
 import ir.mmd.dodota.ui.components.EmptyStateCard
 import ir.mmd.dodota.ui.components.GraphicalFormDialog
 import ir.mmd.dodota.ui.components.PersianAmountInput
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.util.PersianNumberFormatter
 import kotlinx.coroutines.launch
 
@@ -83,6 +84,7 @@ fun CardsManagerScreen(
     }
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
@@ -122,7 +124,7 @@ fun CardsManagerScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 14.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)

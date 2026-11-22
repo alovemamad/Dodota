@@ -36,6 +36,9 @@ import ir.mmd.dodota.ui.components.EmptyStateCard
 import ir.mmd.dodota.ui.components.GlassCard
 import ir.mmd.dodota.ui.components.PrintDatePreset
 import ir.mmd.dodota.ui.components.PrintableSubSection
+import ir.mmd.dodota.ui.glass.LocalGlassSearch
+import ir.mmd.dodota.ui.glass.glassBottomExtraPadding
+import ir.mmd.dodota.ui.glass.glassPageContainerColor
 import ir.mmd.dodota.ui.theme.ExpenseRed
 import ir.mmd.dodota.ui.theme.IncomeGreen
 import ir.mmd.dodota.ui.theme.TransferBlue
@@ -71,6 +74,24 @@ fun TransactionsScreen(
     var showSortAndFilterDialog by remember { mutableStateOf(false) }
     var showPrintDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    val glassSearch = LocalGlassSearch.current
+    var wasGlassSearchActive by remember { mutableStateOf(false) }
+    LaunchedEffect(glassSearch?.active, glassSearch?.query) {
+        if (glassSearch != null) {
+            if (glassSearch.active) {
+                searchQuery = glassSearch.query
+                wasGlassSearchActive = true
+            } else if (wasGlassSearchActive) {
+                searchQuery = ""
+                wasGlassSearchActive = false
+            }
+        }
+    }
+
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val glassExtraBottom = glassBottomExtraPadding()
+    val effectiveBottomInset = if (glassExtraBottom > 0.dp) glassExtraBottom + navBottom else 0.dp
 
     val categoryMap = remember(categories) { categories.associateBy { it.id } }
     val accountMap = remember(accounts) { accounts.associateBy { it.id } }
@@ -123,6 +144,7 @@ fun TransactionsScreen(
             sortOrder != TransactionSortOrder.NEWEST
 
     Scaffold(
+        containerColor = glassPageContainerColor(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             DodotaTopBar(
@@ -159,7 +181,9 @@ fun TransactionsScreen(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = RoundedCornerShape(18.dp),
-                modifier = Modifier.testTag("add_transaction_fab")
+                modifier = Modifier
+                    .padding(bottom = effectiveBottomInset)
+                    .testTag("add_transaction_fab")
             ) {
                 Icon(Icons.Default.Add, contentDescription = "افزودن تراکنش")
             }
@@ -169,27 +193,29 @@ fun TransactionsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(glassPageContainerColor())
         ) {
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Smart Search Box
-            DodotaTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                label = "جستجو (مثلاً: خریدهای بالای ۵۰۰ هزار، خوراک...)",
-                leadingIcon = Icons.Outlined.Search,
-                trailingContent = if (searchQuery.isNotEmpty()) {
-                    {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "پاک کردن")
+            // Smart Search Box (hidden while Glass floating SearchCapsule is active to avoid duplicate inputs)
+            if (glassSearch == null || !glassSearch.active) {
+                DodotaTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = "جستجو (مثلاً: خریدهای بالای ۵۰۰ هزار، خوراک...)",
+                    leadingIcon = Icons.Outlined.Search,
+                    trailingContent = if (searchQuery.isNotEmpty()) {
+                        {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "پاک کردن")
+                            }
                         }
-                    }
-                } else null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-            )
+                    } else null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                )
+            }
 
             // Show Smart Query Interpretation Pill if user typed a numeric range query
             if (parsedNlpQuery.minAmount != null || parsedNlpQuery.maxAmount != null || parsedNlpQuery.exactAmount != null) {
@@ -280,7 +306,7 @@ fun TransactionsScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 84.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 84.dp + effectiveBottomInset),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(filteredTransactions, key = { it.id }) { tx ->
